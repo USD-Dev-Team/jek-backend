@@ -45,7 +45,17 @@ model Users {
   first_name        String?
   last_name         String?
   phoneNumber       String?    @unique
-  registration_step String?    @default("START") // START, FIRST_NAME, LAST_NAME, PHONE_NUMBER, COMPLETED
+  registration_step String?    @default("START") // START, FIRST_NAME, LAST_NAME, PHONE_NUMBER, COMPLETED, REQ_DISTRICT, REQ_ADDRESS, REQ_DESCRIPTION, REQ_PHOTO, REQ_CONFIRM
+  
+  // Vaqtinchalik ariza ma'lumotlari
+  temp_district     District?
+  temp_mahalla      String?
+  temp_street       String?
+  temp_house        String?
+  temp_address      String?
+  temp_description  String?
+  temp_photo        String?
+
   role              jekRoles   @default(User)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
@@ -87,6 +97,8 @@ model Requests {
   description      String      @db.Text
   status           Status_Flow @default(PENDING)
   district         District    // Hudud (Enum)
+  photo_url        String?     
+  note             String?     @db.Text
   rejection_reason String?     @db.Text
   completedAt      DateTime?
 
