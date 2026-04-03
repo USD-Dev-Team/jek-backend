@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum jekRoles {
+  User
+  JEK
+  GOVERNMENT
+  INSPECTION
+}
+
+
+enum District {
+  GULISTON_SHAHAR // Guliston shahri (Viloyat markazi)
+  YANGIYER_SHAHAR // Yangiyer shahri
+  SHIRIN_SHAHAR // Shirin shahri
+  GULISTON_TUMANI // Guliston tumani
+  BOYOVUT // Boyovut tumani
+  SAYXUNOBOD // Sayxunobod tumani
+  GULISTON // Dehqonobod markazi bilan
+  SARDOBA // Sardoba tumani
+  OQOLTIN // Oqoltin tumani
+  MIRZAOBOD // Mirzaobod tumani
+  XAVAST // Xavast tumani
+  SIRDARYO_TUMANI // Sirdaryo tumani
+}
+
+enum Status_Flow {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+//  Users modeli
+
+model Users {
+  id          String     @id @default(uuid())
+  telegram_id BigInt
+  first_name  String
+  last_name   String
+  phoneNumber String     @unique
+  role        jekRoles   @default(User)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  requests    Requests[]
+
+  @@map("users")
+}
+
+// Admin modeli
+
+model Admins {
+  id           String     @id @default(uuid())
+  first_name   String
+  last_name    String
+  phoneNumber  String     @unique
+  password     String
+  address      District // Hudud (Dropdown'dan keladi)
+  role         jekRoles   @default(JEK)
+  isActive     Boolean?   @default(false)
+  jti          String
+  refreshToken String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  requests     Requests[]
+
+  @@map("admins")
+}
+
+// Requests modeli
+
+model Requests {
+  id               String      @id @default(uuid())
+  request_number   String      @unique @db.VarChar(20)
+  user_id          String
+  address          String      @db.VarChar(255)
+  assigned_jek_id  String?
+  latitude         Decimal?    @db.Decimal(10, 8)
+  longitude        Decimal?    @db.Decimal(11, 8)
+  description      String      @db.Text
+  status           Status_Flow @default(PENDING)
+  district         District    // Hudud (Enum)
+  rejection_reason String?     @db.Text
+  completedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assigned_jek      Admins?            @relation(fields: [assigned_jek_id], references: [id])
+  user              Users              @relation(fields: [user_id], references: [id])
+  requestPhotos     RequestPhoto[]
+  requestStatusLogs RequestStatusLog[]
+
+  @@map("requests")
+}
+
+// Murojaat rasmlari (RequestPhotos)
+
+model RequestPhoto {
+  id         String   @id @default(uuid())
+  request_id String
+  request    Requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  file_url         String  @db.Text
+  telegram_file_id String? @db.VarChar(255)
+  file_size        Int? // Byte-larda
+
+  created_at DateTime @default(now())
+
+  @@map("request_photos")
+}
+
+// Status o'zgarish tarixi (RequestStatusLog)
+
+model RequestStatusLog {
+  id         String   @id @default(uuid())
+  request_id String
+  request    Requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  old_status Status_Flow?
+  new_status Status_Flow
+
+  changed_by_role String @db.VarChar(20)
+  changed_by_id   String
+
+  note String? @db.Text
+
+  created_at DateTime @default(now())
+
+  @@map("request_status_logs")
+}

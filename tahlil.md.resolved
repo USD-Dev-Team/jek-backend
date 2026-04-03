@@ -1,0 +1,325 @@
+# 🏗️ JEK Loyihasi — Chuqur Texnik Tahlil
+
+## 📋 Umumiy Ma'lumot
+
+| Xususiyat | Qiymat |
+|---|---|
+| **Framework** | NestJS v11 |
+| **Til** | TypeScript v5.7 |
+| **ORM** | Prisma v7 (PostgreSQL adapter) |
+| **Ma'lumotlar bazasi** | PostgreSQL (pg + PrismaPg adapter) |
+| **Autentifikatsiya** | JWT (Access + Refresh token) |
+| **API hujjati** | Swagger (OpenAPI) |
+| **Parol xashlash** | bcrypt (saltRounds: 12) |
+| **Maqsad** | JEK (Jamoatchilik-kommunal xizmat) arizalar tizimi |
+
+---
+
+## 🗄️ Ma'lumotlar Bazasi Sxemasi (Prisma Schema)
+
+### Modellar
+
+```mermaid
+erDiagram
+    Users ||--o{ Requests : "yuboradi"
+    Admins ||--o{ Requests : "assigned_jek"
+    Requests ||--o{ RequestPhoto : "rasmlar"
+    Requests ||--o{ RequestStatusLog : "status tarixi"
+
+    Users {
+        String id PK
+        BigInt telegram_id
+        String first_name
+        String last_name
+        String phoneNumber UK
+        jekRoles role
+        DateTime createdAt
+        DateTime updatedAt
+    }
+
+    Admins {
+        String id PK
+        String first_name
+        String last_name
+        String phoneNumber UK
+        String password
+        District address
+        jekRoles role
+        Boolean isActive
+        String jti
+        String refreshToken
+    }
+
+    Requests {
+        String id PK
+        String request_number UK
+        String user_id FK
+        String address UK
+        String assigned_jek_id FK
+        Decimal latitude
+        Decimal longitude
+        String description
+        Status_Flow status
+        String rejection_reason
+        DateTime completedAt
+    }
+
+    RequestPhoto {
+        String id PK
+        String request_id FK
+        String file_url
+        String telegram_file_id
+        Int file_size
+    }
+
+    RequestStatusLog {
+        String id PK
+        String request_id FK
+        Status_Flow old_status
+        Status_Flow new_status
+        String changed_by_role
+        String changed_by_id
+        String note
+    }
+```
+
+### Enumlar
+
+| Enum | Qiymatlar |
+|---|---|
+| `jekRoles` | [User](file:///c:/Users/user/Desktop/JEK/src/modules/users/users.service.ts#5-12), `JEK`, `GOVERNMENT`, `INSPECTION` |
+| `District` | 12 ta Sirdaryo viloyati tumani/shahri |
+| `Status_Flow` | `PENDING` → `ASSIGNED` → `IN_PROGRESS` → `COMPLETED` / `REJECTED` |
+
+---
+
+## 🏛️ Arxitektura
+
+```
+src/
+├── main.ts                         # Bootstrap, Swagger, ValidationPipe
+├── app.module.ts                   # Root modul
+├── common/
+│   ├── decorators/
+│   │   └── role.ts                 # @Roles() decorator
+│   └── guards/
+│       ├── token.guard.ts          # JWT tekshiruvi
+│       └── role.guard.ts           # Rol tekshiruvi
+├── core/
+│   └── database/
+│       ├── prisma.service.ts       # PrismaClient singleton
+│       └── prsima.module.ts        # Global @Module (typo!)
+└── modules/
+    ├── auth/                       # Register/Login (faqat Admins)
+    ├── admins/                     # Admin profil, status, parol
+    └── users/                      # Foydalanuvchi ro'yxatdan o'tish (bo'sh!)
+```
+
+---
+
+## 🔐 Autentifikatsiya va Xavfsizlik
+
+### Token Guard ([token.guard.ts](file:///c:/Users/user/Desktop/JEK/src/common/guards/token.guard.ts))
+- `Authorization: Bearer <token>` yoki `?token=<token>` dan qabul qiladi
+- `JWT_ACCESS_SECRET` bilan tekshiradi
+- Rol bo'yicha ([User](file:///c:/Users/user/Desktop/JEK/src/modules/users/users.service.ts#5-12) vs Admin) turli jadvaldan foydalanuvchi topadi
+- Admin uchun **JTI (JWT ID) tekshiruvi** bor — eski sessiyani bloklash uchun
+
+### Role Guard ([role.guard.ts](file:///c:/Users/user/Desktop/JEK/src/common/guards/role.guard.ts))
+- `@Roles()` dekoratori bilan ishlaydi
+- Admin bo'lsa `isActive === false` bo'lsa, blok qiladi
+- Rolga mos kelmasa `ForbiddenException` chiqaradi
+
+### Parol xavfsizligi
+- bcrypt, `saltRounds: 12` — yaxshi
+- Refresh token ham xashlangan holda saqlanadi
+
+---
+
+## 📦 Modullar Tahlili
+
+### Auth Module
+| Endpoint | Metod | Tavsif |
+|---|---|---|
+| `/auth/jek/register` | POST | Admin ro'yxatdan o'tish |
+| `/auth/jel/login` | POST | Admin login |
+
+> [!WARNING]
+> **Typo!** `/auth/jel/login` — `jel` emas, `jek` bo'lishi kerak edi.
+
+### Admins Module
+| Endpoint | Metod | Guard | Tavsif |
+|---|---|---|---|
+| `/admins/self/data` | GET | TokenGuard + RoleGuard(JEK) | O'z profilini ko'rish |
+| `/admins/update/status/:id` | PATCH | TokenGuard + RoleGuard(JEK) | Status o'zgartirish |
+| `/admins/update/profile` | PATCH | TokenGuard + RoleGuard(JEK) | Profilni yangilash |
+| `/admins/change/password` | PATCH | TokenGuard + RoleGuard(JEK) | Parol o'zgartirish |
+
+### Users Module
+| Endpoint | Metod | Guard | Tavsif |
+|---|---|---|---|
+| `/users` | POST | Yo'q | Foydalanuvchi ro'yxatdan o'tish |
+
+> [!CAUTION]
+> `UsersService.userRegister()` metodi **bo'sh** — hech narsa qaytarmaydi va hech nima saqlamaydi!
+
+---
+
+## 🐛 Topilgan Muammolar (Bugs & Issues)
+
+### 1. 🔴 KRITIK — `userRegister()` bo'sh metod
+**Fayl:** `src/modules/users/users.service.ts`
+```ts
+// Hozir:
+userRegister(createUserDto: CreateUserDto) {
+    // Bo'sh! Hech narsa qilmaydi!
+}
+```
+Foydalanuvchi ro'yxatdan o'tishi **umuman ishlamaydi**.
+
+---
+
+### 2. 🔴 KRITIK — `CreateUserDto`da noto'g'ri import
+**Fayl:** `src/modules/users/dto/create-user.dto.ts`
+```ts
+import { UserRole } from '@prisma/client'; // ❌ Bu mavjud emas!
+// To'g'risi:
+import { jekRoles } from '@prisma/client'; // ✅
+```
+Schema'da `UserRole` yo'q, faqat `jekRoles` bor. Bu **kompilatsiya xatosi** keltirib chiqaradi.
+
+---
+
+### 3. 🟡 MUHIM — URL Typo
+**Fayl:** `src/modules/auth/auth.controller.ts:21`
+```ts
+@Post('jel/login') // ❌ "jel" noto'g'ri
+@Post('jek/login') // ✅ "jek" bo'lishi kerak
+```
+
+---
+
+### 4. 🟡 MUHIM — `Prisma schema`da `datasource` URL yo'q
+```prisma
+datasource db {
+  provider = "postgresql"
+  // url = env("DATABASE_URL")  ← YO'Q!
+}
+```
+`url` maydoni **ko'rsatilmagan**. `PrismaService` `process.env.DATABASE_URL`dan o'zi oladi, lekin Prisma migration va generate uchun schema'da ham bo'lishi **shart**.
+
+---
+
+### 5. 🟡 MUHIM — `UpdateAdminDto`da ikki xil maydon konflikti
+```ts
+district?: District;  // ❌ Schema'da "district" maydoni yo'q
+address?: District;   // ✅ Schema'da "address" bor
+```
+`district` maydoni ortiqcha va `updateAdminDto` to'g'ridan-to'g'ri Prisma update'ga berilganda xato chiqaradi.
+
+---
+
+### 6. 🟡 MUHIM — `isActive` logikasi noto'g'ri
+**Fayl:** `src/modules/admins/admins.service.ts:69`
+```ts
+if (existJek.isActive && updateStatus.isActive) {
+    throw new BadRequestException('Already active');
+}
+// Agar isActive false->false holati ham tekshirilmaydi!
+```
+Faqat `true->true` holat tekshirilgan. `false->false` (allaqachon o'chirilgan) holat ham tekshirilishi kerak.
+
+---
+
+### 7. 🟠 O'RTA — `remove()` metodi ishlanmagan
+**Fayl:** `src/modules/admins/admins.service.ts:103`
+```ts
+remove(id: number) {
+    return `This action removes a #${id} admin`; // Placeholder!
+}
+```
+Bu controller'ga ulangan emas, lekin metod stub holida qoldirilgan.
+
+---
+
+### 8. 🟠 O'RTA — Token ichida juda ko'p ma'lumot
+**Fayl:** `src/modules/auth/auth.service.ts:89`
+```ts
+const accessToken = await this.jwt.signAsync(existJek, { ... });
+// existJek = butun Admins objekti (password hash bilan!)
+```
+JWT payload'ga butun `existJek` ob'ekti (refreshToken hash, password hash kabilar) kiritiladi. Faqat `{id, role, jti}` yetarli.
+
+---
+
+### 9. 🟢 KICHIK — Fayl nomi xatosi
+**Fayl:** `src/core/database/prsima.module.ts` → `prisma.module.ts` bo'lishi kerak edi
+
+---
+
+### 10. 🟢 KICHIK — `jti` requestlar orasida hech qachon yangilanmaydi
+Schema'da `jti String` bor lekin register/login methodlarda `jti` qiymati token'ga ham, bazaga ham **saqlanmayapti**. Token guard `user.jti !== payload.jti` tekshiradi — bu hamisha muvaffaqiyatsiz bo'ladi!
+
+---
+
+## ✅ Yaxshi Tomonlar
+
+| Jihat | Baho |
+|---|---|
+| NestJS modular arxitekturasi | ✅ To'g'ri tuzilgan |
+| Swagger integratsiyasi | ✅ `persistAuthorization` bilan |
+| bcrypt saltRounds: 12 | ✅ Xavfsiz |
+| `ValidationPipe` global | ✅ `whitelist: true` bilan |
+| Refresh token xashlangan | ✅ Xavfsiz saqlash |
+| `PrismaModule` global `@Global()` | ✅ Qayta import kerak emas |
+| `OnModuleInit/Destroy` lifecycle | ✅ To'g'ri |
+| `select` bilan faqat kerakli maydonlar | ✅ |
+| O'zbek tilidagi xato xabarlari | ✅ Foydalanuvchiga qulay |
+
+---
+
+## 🚀 Tavsiyalar (Priority bo'yicha)
+
+### 🔴 Darhol hal qilinishi kerak
+1. `userRegister()` metodini to'ldiring
+2. `CreateUserDto`dagi `UserRole` importini tuzating → `jekRoles`
+3. `jti` ni login/register vaqtida generate qilib DB'ga saqlang
+4. Schema'ga `url = env("DATABASE_URL")` qo'shing
+
+### 🟡 Tez orada
+5. Login URL typosini tuzating (`jel` → `jek`)
+6. JWT token payload'dan `password`, `refreshToken` olib tashlang
+7. `UpdateAdminDto`dan `district` maydonini olib tashlang
+8. `updateStatus` metodida `false→false` tekshiruvini qo'shing
+
+### 🟠 Keyinroq
+9. Requests moduli yarating (hali yo'q!)
+10. `GOVERNMENT` va `INSPECTION` rollar uchun endpointlar yarating
+11. Fayl nomini `prsima.module.ts` → `prisma.module.ts` qilib rename qiling
+12. Exception filtri qo'shing (global error handling)
+13. Rate limiting qo'shing (brute-force himoyasi)
+
+### 🟢 Kelajakda
+14. Unit va integration testlar yozing
+15. `.env` uchun `joi` yoki `zod` validation qo'shing
+16. `helmet`, `cors` middleware qo'shing
+
+---
+
+## 📊 Qamrov (Coverage) — Nima Bor va Nima Yo'q
+
+| Funksiya | Holat |
+|---|---|
+| Admin ro'yxatdan o'tish | ✅ Bor (lekin JTI xatosi bor) |
+| Admin login | ✅ Bor (lekin JTI xatosi bor) |
+| Admin profil ko'rish | ✅ Bor |
+| Admin profil yangilash | ✅ Bor |
+| Admin status o'zgartirish | ✅ Bor |
+| Admin parol o'zgartirish | ✅ Bor |
+| Foydalanuvchi ro'yxatdan o'tish | ❌ Bo'sh metod |
+| Arizalar (Requests) CRUD | ❌ Yo'q |
+| Fotosuratlar yuklash | ❌ Yo'q |
+| Status log tarixi | ❌ Yo'q |
+| Token yangilash (refresh) | ❌ Yo'q |
+| Logout | ❌ Yo'q |
+| GOVERNMENT/INSPECTION endpointlar | ❌ Yo'q |
