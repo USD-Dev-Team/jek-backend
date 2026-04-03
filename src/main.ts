@@ -4,7 +4,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule,);
+  app.enableCors();
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -17,6 +18,7 @@ async function bootstrap() {
     .setTitle('JEK swagger API')
     .setDescription(`JEK loyihasi uchun backend tizimi API hujjatlari`)
     .addServer('https://api.usderp.uz/jek')
+    .addServer('http://localhost:4040')
     .setVersion('1.0')
     .addBearerAuth(
       {
