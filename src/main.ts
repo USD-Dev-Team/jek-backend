@@ -16,6 +16,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('JEK swagger API')
     .setDescription(`JEK loyihasi uchun backend tizimi API hujjatlari`)
+    .addServer('https://api.usderp.uz/jek')
     .setVersion('1.0')
     .addBearerAuth(
       {
