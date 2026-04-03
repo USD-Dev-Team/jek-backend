@@ -7,6 +7,8 @@ import {
     UseGuards,
     Req,
     Param,
+    InternalServerErrorException,
+    HttpException,
 } from '@nestjs/common';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
@@ -27,8 +29,13 @@ export class RequestsController {
         description: 'Bot tomonidan yuborilgan foydalanuvchi arizasini saqlash. Ruxsat: Hamma (Hozircha).',
     })
     @Post()
-    create(@Body() createRequestDto: CreateRequestDto) {
-        return this.requestsService.create(createRequestDto);
+    async create(@Body() createRequestDto: CreateRequestDto) {
+        try {
+            return await this.requestsService.create(createRequestDto);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+        }
     }
 
     @ApiOperation({
@@ -39,8 +46,13 @@ export class RequestsController {
     @UseGuards(TokenGuard, RoleGuard)
     @Roles(jekRoles.JEK)
     @Get('pending')
-    findPending(@Req() req: any) {
-        return this.requestsService.findPendingByDistrict(req.user.address);
+    async findPending(@Req() req: any) {
+        try {
+            return await this.requestsService.findPendingByDistrict(req.user.address);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+        }
     }
 
     @ApiOperation({
@@ -51,8 +63,13 @@ export class RequestsController {
     @UseGuards(TokenGuard, RoleGuard)
     @Roles(jekRoles.JEK)
     @Get('my-active')
-    findMyActive(@Req() req: any) {
-        return this.requestsService.findMyActive(req.user.id);
+    async findMyActive(@Req() req: any) {
+        try {
+            return await this.requestsService.findMyActive(req.user.id);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+        }
     }
 
     @ApiOperation({
@@ -63,8 +80,13 @@ export class RequestsController {
     @UseGuards(TokenGuard, RoleGuard)
     @Roles(jekRoles.JEK)
     @Patch('assign/:id')
-    assign(@Param('id') id: string, @Req() req: any) {
-        return this.requestsService.assign(id, req.user.id);
+    async assign(@Param('id') id: string, @Req() req: any) {
+        try {
+            return await this.requestsService.assign(id, req.user.id);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+        }
     }
 
     @ApiOperation({
@@ -75,12 +97,17 @@ export class RequestsController {
     @UseGuards(TokenGuard, RoleGuard)
     @Roles(jekRoles.JEK)
     @Patch('complete/:id')
-    complete(
+    async complete(
         @Param('id') id: string,
         @Req() req: any,
         @Body() body: CompleteRequestDto,
     ) {
-        return this.requestsService.complete(id, req.user.id, body.note);
+        try {
+            return await this.requestsService.complete(id, req.user.id, body.note);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+        }
     }
 
     @ApiOperation({
@@ -91,11 +118,16 @@ export class RequestsController {
     @UseGuards(TokenGuard, RoleGuard)
     @Roles(jekRoles.JEK)
     @Patch('reject/:id')
-    reject(
+    async reject(
         @Param('id') id: string,
         @Req() req: any,
         @Body() body: RejectRequestDto,
     ) {
-        return this.requestsService.reject(id, req.user.id, body.reason);
+        try {
+            return await this.requestsService.reject(id, req.user.id, body.reason);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+        }
     }
 }

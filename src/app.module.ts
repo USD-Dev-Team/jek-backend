@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AdminsModule } from './modules/admins/admins.module';
 import { RequestsModule } from './modules/requests/requests.module';
+import { BotModule } from './modules/bot/bot.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RequestsModule } from './modules/requests/requests.module';
     UsersModule,
     AdminsModule,
     RequestsModule,
+    BotModule,
   ],
   controllers: [],
   providers: [],
