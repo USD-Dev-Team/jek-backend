@@ -40,15 +40,16 @@ enum Status_Flow {
 //  Users modeli
 
 model Users {
-  id          String     @id @default(uuid())
-  telegram_id BigInt
-  first_name  String
-  last_name   String
-  phoneNumber String     @unique
-  role        jekRoles   @default(User)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  requests    Requests[]
+  id                String     @id @default(uuid())
+  telegram_id       BigInt     @unique
+  first_name        String?
+  last_name         String?
+  phoneNumber       String?    @unique
+  registration_step String?    @default("START") // START, FIRST_NAME, LAST_NAME, PHONE_NUMBER, COMPLETED
+  role              jekRoles   @default(User)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  requests          Requests[]
 
   @@map("users")
 }

@@ -1,5 +1,5 @@
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, InternalServerErrorException, HttpException } from '@nestjs/common';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { AuthService } from './auth.service';
 
@@ -14,13 +14,18 @@ export class AuthController {
   })
   @Post('jek/register')
   async register(@Body() createAuthDto: RegisterDto) {
-    const result = await this.authService.register(createAuthDto);
+    try {
+      const result = await this.authService.register(createAuthDto);
 
-    return {
-      message: result.message,
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    };
+      return {
+        message: result.message,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+    }
   }
 
   @ApiOperation({
@@ -30,12 +35,17 @@ export class AuthController {
   })
   @Post('jek/login')
   async login(@Body() loginDto: LoginDto) {
-    const result = await this.authService.login(loginDto);
+    try {
+      const result = await this.authService.login(loginDto);
 
-    return {
-      message: result.message,
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    };
+      return {
+        message: result.message,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+    }
   }
 }
