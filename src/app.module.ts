@@ -7,6 +7,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { AdminsModule } from './modules/admins/admins.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { BotModule } from './modules/bot/bot.module';
+import { MediaModule } from './modules/media/media.module';
+import { RequestPhotosModule } from './modules/request-photos/request-photos.module';
 
 @Module({
   imports: [
@@ -21,13 +23,15 @@ import { BotModule } from './modules/bot/bot.module';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_ACCESS_SECRET'),
-        signOptions: { expiresIn: '1h' }, // Access token muddati
+        signOptions: { expiresIn: '1h' },
       }),
     }),
     AuthModule,
     UsersModule,
     AdminsModule,
     RequestsModule,
+    MediaModule,
+    RequestPhotosModule,
     BotModule,
   ],
   controllers: [],

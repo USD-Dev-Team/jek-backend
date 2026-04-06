@@ -1,79 +1,3 @@
-// import {
-//   CanActivate,
-//   ExecutionContext,
-//   Injectable,
-//   UnauthorizedException,
-// } from '@nestjs/common';
-// import { ConfigService } from '@nestjs/config';
-// import { JwtService } from '@nestjs/jwt';
-// import { Roles } from '@prisma/client';
-// import { PrismaService } from 'src/core/database/prisma.service';
-
-// @Injectable()
-// export class TokenGuard implements CanActivate {
-//   constructor(
-//     private config: ConfigService,
-//     private jwt: JwtService,
-//     private prisma: PrismaService,
-//   ) {}
-//   async canActivate(context: ExecutionContext): Promise<boolean> {
-//     try {
-//       const req = context.switchToHttp().getRequest();
-//       let token = req.headers.authorization;
-
-//       if (!token && req.query.token) {
-//         token = `Bearer ${req.query.token}`;
-//       }
-
-//       if (!token || !token.startsWith('Bearer ')) {
-//         throw new UnauthorizedException('Token mavjud emas yoki buzilgan');
-//       }
-//       const payload = await this.jwt.verifyAsync(token.split(' ')[1], {
-//         secret: this.config.get('JWT_SECRET'),
-//       });
-
-//       let user:any
-
-//       if(payload.role===Roles.User){
-
-//         user = await this.prisma.users.findUnique({
-//           where: { id: payload.id },
-//           select: {
-//             id: true,
-//             phoneNumber:true,
-//             role: true,
-//           },
-//         });
-//       }else if (
-//         payload.role === Roles.INSPECTION ||
-//         payload.role === Roles.JEK ||
-//         payload.role === Roles.GOVERNMENT
-//       ) {
-//         user = await this.prisma.admins.findUnique({
-//           where: { id: payload.id },
-//           select: {
-//             id: true,
-//             phoneNumber: true,
-//             role: true,
-//           },
-//         });
-//       }
-
-//       if (!user) {
-//         throw new UnauthorizedException('Foydalanuvchi topilmadi');
-//       }
-
-//       req['user'] = user;
-//       return true;
-//     } catch (error) {
-//       if (error instanceof UnauthorizedException) {
-//         throw error;
-//       }
-//       throw new UnauthorizedException('Token mavjud emas yoki buzilgan');
-//     }
-//   }
-// }
-
 import {
   CanActivate,
   ExecutionContext,
@@ -119,19 +43,15 @@ export class TokenGuard implements CanActivate {
           select: { id: true, role: true, phoneNumber: true },
         });
       } else {
+        // Id orqali bazadan kerakli malumotlarni o'qiymiz (district ham kerak)
         user = await this.prisma.admins.findUnique({
           where: { id: payload.id },
-          select: { id: true, role: true, jti: true, isActive: true, address: true },
+          select: { id: true, role: true, isActive: true, district: true, address: true },
         });
-
-        if (user && user.jti !== payload.jti) {
-          throw new UnauthorizedException(
-            'Sessiya eskirgan yoki boshqa qurilmadan kirilgan',
-          );
-        }
       }
 
       if (!user) throw new UnauthorizedException('Foydalanuvchi topilmadi');
+      if (user.isActive === false) throw new UnauthorizedException('Akkauntingiz faollashtirilmagan');
 
       req['user'] = user;
       return true;

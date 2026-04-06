@@ -3,12 +3,12 @@ import {
     ConflictException,
     Injectable,
 } from '@nestjs/common';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
 import { PrismaService } from 'src/core/database/prisma.service';
+import { LoginDto, RegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -18,7 +18,7 @@ export class AuthService {
         private readonly configService: ConfigService,
     ) { }
 
-    async register(registerDto: RegisterDto) {
+    async registerJek(registerDto: RegisterDto) {
         const cleanPhone = registerDto.phoneNumber.replace(/\D/g, '');
 
         const finalPhone =
@@ -26,6 +26,7 @@ export class AuthService {
 
         const existJek = await this.prisma.admins.findUnique({
             where: { phoneNumber: finalPhone },
+            select: { id: true, password: true, phoneNumber: true, isActive: true, role: true } as any
         });
 
         if (existJek) {
@@ -40,21 +41,23 @@ export class AuthService {
         const hashPassword = await bcrypt.hash(password, 12);
         const jti = crypto.randomUUID();
 
-        const newJek = await this.prisma.admins.create({
+        const newJek: any = await this.prisma.admins.create({
             data: {
-                ...data,
+                first_name: registerDto.first_name,
+                last_name: registerDto.last_name,
                 password: hashPassword,
                 phoneNumber: finalPhone,
+                district: registerDto.address,
+                address: (registerDto.address as string).replace('_', ' '),
                 jti,
-            },
-            select: { phoneNumber: true, id: true, role: true, jti: true },
+            } as any,
+            select: { phoneNumber: true, id: true, role: true, jti: true, first_name: true, last_name: true, district: true, address: true } as any,
         });
 
         const payload = {
             id: newJek.id,
             role: newJek.role,
             phoneNumber: newJek.phoneNumber,
-            jti: newJek.jti,
         };
 
         const accessToken = await this.jwt.signAsync(payload, {
@@ -67,27 +70,21 @@ export class AuthService {
             expiresIn: '7d',
         });
 
-        const hashedRefreshToken = await bcrypt.hash(refreshToken, 12);
-
-        await this.prisma.admins.update({
-            where: { id: newJek.id },
-            data: { refreshToken: hashedRefreshToken },
-        });
-
         return {
-            message: "Muvaffaqiyatli ro'yxatdan o'tdingiz",
+            message: 'Muvofaqiyatli ro\'yxatdan o\'tdingiz',
+            userId: newJek.id,
             refreshToken,
             accessToken,
         };
     }
-
+ 
     async login(loginDto: LoginDto) {
         const cleanPhone = loginDto.phoneNumber.replace(/\D/g, '');
 
         const finalPhone =
             cleanPhone.length === 9 ? `998${cleanPhone}` : cleanPhone;
 
-        const existJek = await this.prisma.admins.findUnique({
+        const existJek: any = await this.prisma.admins.findUnique({
             where: { phoneNumber: finalPhone },
         });
 
@@ -109,7 +106,6 @@ export class AuthService {
             id: existJek.id,
             role: existJek.role,
             phoneNumber: existJek.phoneNumber,
-            jti,
         };
 
         const accessToken = await this.jwt.signAsync(payload, {
@@ -126,11 +122,12 @@ export class AuthService {
 
         await this.prisma.admins.update({
             where: { id: existJek.id },
-            data: { refreshToken: hashedRefreshToken, jti },
+            data: { refreshToken: hashedRefreshToken, jti } as any,
         });
 
         return {
             message: 'Login muvofaqiyatli amalga oshdi',
+            userId: existJek.id,
             refreshToken,
             accessToken,
         };

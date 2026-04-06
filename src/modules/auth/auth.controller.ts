@@ -13,12 +13,13 @@ export class AuthController {
     description: "Yangi JEK adminini tizimga qo'shish. Ruxsat: Hamma.",
   })
   @Post('jek/register')
-  async register(@Body() createAuthDto: RegisterDto) {
+  async registerJek(@Body() createAuthDto: RegisterDto) {
     try {
-      const result = await this.authService.register(createAuthDto);
+      const result = await this.authService.registerJek(createAuthDto);
 
       return {
         message: result.message,
+        userId:result.userId,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };
@@ -40,6 +41,7 @@ export class AuthController {
 
       return {
         message: result.message,
+        userId:result.userId,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };

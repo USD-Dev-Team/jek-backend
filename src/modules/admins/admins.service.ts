@@ -23,8 +23,10 @@ export class AdminsService {
         last_name: true,
         phoneNumber: true,
         address: true,
+        district: true,
         role: true,
-      },
+        isActive: true
+      } as any,
     });
     if (!existJek) {
       throw new NotFoundException('Employee not found');
@@ -36,7 +38,6 @@ export class AdminsService {
   }
 
   async updateProfile(id: string, updateAdminDto: UpdateAdminDto) {
-
     const existJek = await this.prisma.admins.findUnique({
       where: { id },
     });
@@ -55,8 +56,9 @@ export class AdminsService {
           last_name: true,
           phoneNumber: true,
           address: true,
+          district: true,
           role: true,
-        },
+        } as any,
       }),
     };
   }
@@ -98,6 +100,28 @@ export class AdminsService {
       data: { password: hashPassword },
     });
     return { success: true, message: 'Password changed successfully.' };
+  }
+
+  async findAll(isActive: boolean = true) {
+    const admins = await this.prisma.admins.findMany({
+      where: { isActive },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        phoneNumber: true,
+        district: true,
+        role: true,
+        isActive: true,
+        createdAt: true
+      } as any,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return {
+      success: true,
+      data: admins
+    };
   }
 
   remove(id: number) {
