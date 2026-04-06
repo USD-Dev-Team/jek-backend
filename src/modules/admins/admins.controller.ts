@@ -9,6 +9,7 @@ import {
   UseGuards,
   InternalServerErrorException,
   HttpException,
+  Query,
 } from '@nestjs/common';
 import { AdminsService } from './admins.service';
 import {
@@ -16,7 +17,7 @@ import {
   UpdateAdminDto,
   updateStatusDto,
 } from './dto/update-admin.dto';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { TokenGuard } from 'src/common/guards/token.guard';
 import { RoleGuard } from 'src/common/guards/role.guard';
 import { Roles } from 'src/common/decorators/role';
@@ -30,6 +31,24 @@ export class AdminsController {
   constructor(private readonly adminsService: AdminsService) { }
 
   @ApiOperation({
+    summary: "Xodimlar ro'yxatini olish",
+    description: "Barcha faol yoki nofaol xodimlarni ko'rish. Ruxsat: INSPECTION.",
+  })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean, description: 'Default: true' })
+  @UseGuards(TokenGuard, RoleGuard)
+  @Roles(jekRoles.INSPECTION)
+  @Get('all-list')
+  async findAll(@Query('isActive') isActiveQuery: string) {
+    try {
+      const isActive = isActiveQuery === 'false' ? false : true;
+      return await this.adminsService.findAll(isActive);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+    }
+  }
+
+  @ApiOperation({
     summary: "O'z profil ma'lumotlarini olish",
     description: "Tizimga kirgan adminning barcha ma'lumotlarini qaytaradi. Ruxsat: JEK.",
   })
@@ -37,7 +56,7 @@ export class AdminsController {
   @Roles(jekRoles.JEK)
   @AllowInactive()
   @Get('self/data')
-  async findSelf(@Req() req: Request) {
+  async findSelf(@Req() req: any) {
     try {
       return await this.adminsService.findSelf(req['user'].id);
     } catch (error) {
@@ -48,10 +67,10 @@ export class AdminsController {
 
   @ApiOperation({
     summary: "Xodim holatini o'zgartirish (activ/inactiv)",
-    description: "Xodimni tizimda faollashtirish yoki o'chirish. Ruxsat: JEK.",
+    description: "Xodimni tizimda faollashtirish yoki o'chirish. Ruxsat: INSPECTION.",
   })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.JEK)
+  @Roles(jekRoles.INSPECTION)
   @Patch('update/status/:id')
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -72,7 +91,7 @@ export class AdminsController {
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.JEK)
   @Patch('update/profile')
-  async updateProfile(@Req() req: Request, @Body() updateAdminDto: UpdateAdminDto) {
+  async updateProfile(@Req() req: any, @Body() updateAdminDto: UpdateAdminDto) {
     try {
       return await this.adminsService.updateProfile(req['user'].id, updateAdminDto);
     } catch (error) {
@@ -89,7 +108,7 @@ export class AdminsController {
   @Roles(jekRoles.JEK)
   @Patch('change/password')
   async changePassword(
-    @Req() req: Request,
+    @Req() req: any,
     @Body() changePassword: ChangePasswordDto,
   ) {
     try {

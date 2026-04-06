@@ -30,7 +30,7 @@ export class RequestsService {
                 longitude,
                 description,
                 status: 'PENDING',
-            },
+            } as any,
         });
 
         return {
@@ -46,7 +46,15 @@ export class RequestsService {
                 district,
                 status: 'PENDING',
             },
-            include: { user: true },
+            select: {
+                id: true,
+                createdAt: true,
+                address: true,
+                requestPhotos: true,
+                description: true,
+                status: true,
+                request_number: true
+            },
         });
     }
 
@@ -56,7 +64,15 @@ export class RequestsService {
                 assigned_jek_id: jekId,
                 status: 'IN_PROGRESS',
             },
-            include: { user: true },
+            select: {
+                id: true,
+                createdAt: true,
+                address: true,
+                requestPhotos: true,
+                description: true,
+                status: true,
+                request_number: true
+            },
         });
     }
 

@@ -1,19 +1,27 @@
 -- CreateEnum
-CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'GOVERNMENT', 'INSPECTION');
-
--- CreateEnum
-CREATE TYPE "District" AS ENUM ('GULISTON_SHAHAR', 'YANGIYER_SHAHAR', 'SHIRIN_SHAHAR', 'GULISTON_TUMANI', 'BOYOVUT', 'SAYXUNOBOD', 'GULISTON', 'SARDOBA', 'OQOLTIN', 'MIRZAOBOD', 'XAVAST', 'SIRDARYO_TUMANI');
+CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'INSPECTION');
 
 -- CreateEnum
 CREATE TYPE "Status_Flow" AS ENUM ('PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED');
+
+-- CreateEnum
+CREATE TYPE "District" AS ENUM ('GULISTON_SHAHAR', 'YANGIYER_SHAHAR', 'SHIRIN_SHAHAR', 'GULISTON_TUMANI', 'BOYOVUT_TUMANI', 'SAYXUNOBOD_TUMANI', 'MIRZAOBOD_TUMANI', 'OQOLTIN_TUMANI', 'SARD_OBA_TUMANI', 'XOVOS_TUMANI', 'SARDOBA_TUMANI');
 
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
     "telegram_id" BIGINT NOT NULL,
-    "first_name" TEXT NOT NULL,
-    "last_name" TEXT NOT NULL,
-    "phoneNumber" TEXT NOT NULL,
+    "first_name" TEXT,
+    "last_name" TEXT,
+    "phoneNumber" TEXT,
+    "registration_step" TEXT DEFAULT 'START',
+    "temp_district" "District",
+    "temp_mahalla" TEXT,
+    "temp_street" TEXT,
+    "temp_house" TEXT,
+    "temp_address" TEXT,
+    "temp_description" TEXT,
+    "temp_photos" JSONB,
     "role" "jekRoles" NOT NULL DEFAULT 'User',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -24,15 +32,16 @@ CREATE TABLE "users" (
 -- CreateTable
 CREATE TABLE "admins" (
     "id" TEXT NOT NULL,
-    "first_name" TEXT NOT NULL,
-    "last_name" TEXT NOT NULL,
-    "phoneNumber" TEXT NOT NULL,
-    "password" TEXT NOT NULL,
-    "address" "District" NOT NULL,
+    "first_name" VARCHAR(50) NOT NULL,
+    "last_name" VARCHAR(50) NOT NULL,
+    "password" VARCHAR(255) NOT NULL,
+    "phoneNumber" VARCHAR(20) NOT NULL,
+    "district" "District" NOT NULL,
+    "address" VARCHAR(255) NOT NULL,
     "role" "jekRoles" NOT NULL DEFAULT 'JEK',
-    "isActive" BOOLEAN DEFAULT false,
-    "jti" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT false,
     "refreshToken" TEXT,
+    "jti" VARCHAR(255),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -51,6 +60,7 @@ CREATE TABLE "requests" (
     "description" TEXT NOT NULL,
     "status" "Status_Flow" NOT NULL DEFAULT 'PENDING',
     "district" "District" NOT NULL,
+    "note" TEXT,
     "rejection_reason" TEXT,
     "completedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -75,15 +85,18 @@ CREATE TABLE "request_photos" (
 CREATE TABLE "request_status_logs" (
     "id" TEXT NOT NULL,
     "request_id" TEXT NOT NULL,
-    "old_status" "Status_Flow",
+    "old_status" "Status_Flow" NOT NULL,
     "new_status" "Status_Flow" NOT NULL,
-    "changed_by_role" VARCHAR(20) NOT NULL,
-    "changed_by_id" TEXT NOT NULL,
+    "changed_by_role" VARCHAR(50) NOT NULL,
+    "changed_by_id" VARCHAR(50) NOT NULL,
     "note" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "request_status_logs_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_telegram_id_key" ON "users"("telegram_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_phoneNumber_key" ON "users"("phoneNumber");

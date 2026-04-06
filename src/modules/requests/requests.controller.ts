@@ -48,7 +48,7 @@ export class RequestsController {
     @Get('pending')
     async findPending(@Req() req: any) {
         try {
-            return await this.requestsService.findPendingByDistrict(req.user.address);
+            return await this.requestsService.findPendingByDistrict(req.user.district);
         } catch (error) {
             if (error instanceof HttpException) throw error;
             throw new InternalServerErrorException('Serverda xatolik yuz berdi');

@@ -1,18 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
+import { MediaService } from '../media/media.service';
+import { ConfigService } from '@nestjs/config';
+import { RequestPhotosService } from '../request-photos/request-photos.service';
 
 @Injectable()
 export class BotService {
     private readonly logger = new Logger(BotService.name);
-    constructor(private readonly prisma: PrismaService) { }
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly mediaService: MediaService,
+        private readonly configService: ConfigService,
+        private readonly requestPhotosService: RequestPhotosService
+    ) { }
 
     async findOrCreateUser(telegramId: number) {
-        const user: any = await this.prisma.users.findUnique({
+        let user: any = await this.prisma.users.findUnique({
             where: { telegram_id: BigInt(telegramId) } as any,
         });
 
         if (!user) {
-            return this.prisma.users.create({
+            user = await this.prisma.users.create({
                 data: {
                     telegram_id: BigInt(telegramId),
                     registration_step: 'FIRST_NAME',
@@ -20,25 +29,42 @@ export class BotService {
             });
         }
 
-        return user;
-    }
+        if (!user.registration_step) {
+            user = await this.prisma.users.update({
+                where: { id: user.id },
+                data: { registration_step: 'FIRST_NAME' } as any
+            });
+        }
 
-    async setStep(telegramId: number, step: string) {
-        return this.prisma.users.update({
-            where: { telegram_id: BigInt(telegramId) } as any,
-            data: { registration_step: step } as any,
-        });
+        return user;
     }
 
     async updateUserData(telegramId: number, data: any) {
         if (data.phoneNumber) {
-            // Tozalash
             data.phoneNumber = data.phoneNumber.replace(/\D/g, '');
             if (data.phoneNumber.length === 9) data.phoneNumber = `998${data.phoneNumber}`;
         }
-        return this.prisma.users.update({
+
+        const updated = await this.prisma.users.update({
             where: { telegram_id: BigInt(telegramId) } as any,
             data: data as any,
+        });
+
+        this.logger.log(`User ${telegramId} data updated: registration_step -> ${updated.registration_step}`);
+        return updated;
+    }
+
+    async addTempPhoto(telegramId: number, fileId: string) {
+        const user: any = await this.prisma.users.findUnique({
+            where: { telegram_id: BigInt(telegramId) } as any,
+        });
+
+        const currentPhotos = Array.isArray(user.temp_photos) ? user.temp_photos : [];
+        const updatedPhotos = [...currentPhotos, fileId];
+
+        return this.prisma.users.update({
+            where: { telegram_id: BigInt(telegramId) } as any,
+            data: { temp_photos: updatedPhotos as any } as any,
         });
     }
 
@@ -56,6 +82,12 @@ export class BotService {
                 where: {
                     user_id: user.id,
                     status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] }
+                },
+                select: {
+                    id: true,
+                    request_number: true,
+                    status: true,
+                    createdAt: true
                 },
                 orderBy: { createdAt: 'desc' },
                 skip,
@@ -75,6 +107,9 @@ export class BotService {
     async getRequestById(requestId: string) {
         return this.prisma.requests.findUnique({
             where: { id: requestId },
+            include: {
+                requestPhotos: true
+            }
         });
     }
 
@@ -88,8 +123,8 @@ export class BotService {
         }
 
         const requestNumber = await this.generateRequestNumber();
+        const botToken = this.configService.get<string>('BOT_TOKEN');
 
-        // Ariza yaratish
         const request = await this.prisma.requests.create({
             data: {
                 request_number: requestNumber,
@@ -97,12 +132,25 @@ export class BotService {
                 district: user.temp_district,
                 address: user.temp_address,
                 description: user.temp_description,
-                photo_url: user.temp_photo,
                 status: 'PENDING',
             } as any,
         });
 
-        // Vaqtinchalik maydonlarni tozalash va stepni COMPLETED ga qaytarish
+        if (Array.isArray(user.temp_photos) && botToken) {
+            const photosToCreate: any[] = [];
+            for (const fileId of user.temp_photos) {
+                try {
+                    const localUrl = await this.mediaService.downloadFromTelegram(fileId, botToken);
+                    photosToCreate.push({ file_url: localUrl, telegram_file_id: fileId });
+                } catch (e) {
+                    this.logger.error(`Error downloading photo ${fileId}:`, e);
+                }
+            }
+            if (photosToCreate.length > 0) {
+                await this.requestPhotosService.createMany(request.id, photosToCreate);
+            }
+        }
+
         await this.prisma.users.update({
             where: { telegram_id: BigInt(telegramId) } as any,
             data: {
@@ -113,7 +161,7 @@ export class BotService {
                 temp_house: null,
                 temp_address: null,
                 temp_description: null,
-                temp_photo: null,
+                temp_photos: null,
             } as any,
         });
 

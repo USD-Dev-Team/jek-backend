@@ -3,36 +3,44 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import { join } from 'path';
 import cookieParser from 'cookie-parser';
 
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap(): Promise<void> {
+  // BigInt serialization fix
+  (BigInt.prototype as any).toJSON = function () {
+    return this.toString();
+  };
+
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
+
+  // Static files serving
+  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3000);
   const nodeEnv = config.get<string>('NODE_ENV', 'development');
-  const isProd = nodeEnv === 'production';
 
   const httpLogger = new Logger('HTTP');
   const appLogger = new Logger('Bootstrap');
 
   // CORS sozlamalari
   app.enableCors({
-    origin: true, // Hozircha barcha originlarga ruxsat (user xohishiga ko'ra o'zgartirish mumkin)
+    origin: true,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   app.use(cookieParser());
-  // app.setGlobalPrefix('api'); // Agar prefiks kerak bo'lsa yoqing
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -57,14 +65,14 @@ async function bootstrap(): Promise<void> {
               ? '\x1b[36m' // Havorang
               : '\x1b[32m'; // Yashil
 
-      httpLogger.log( 
+      httpLogger.log(
         `${color}${req.method}\x1b[0m ${req.originalUrl} → ${res.statusCode} (${duration}ms)`,
       );
     });
- 
+
     next();
   });
- 
+
   // Swagger sozlamalari
   const swaggerConfig = new DocumentBuilder()
     .setTitle('JEK Swagger API')

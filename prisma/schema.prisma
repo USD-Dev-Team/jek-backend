@@ -6,35 +6,35 @@ datasource db {
   provider = "postgresql"
 }
 
+// Rollar ro'yxati
 enum jekRoles {
   User
   JEK
-  GOVERNMENT
   INSPECTION
 }
 
-
-enum District {
-  GULISTON_SHAHAR // Guliston shahri (Viloyat markazi)
-  YANGIYER_SHAHAR // Yangiyer shahri
-  SHIRIN_SHAHAR // Shirin shahri
-  GULISTON_TUMANI // Guliston tumani
-  BOYOVUT // Boyovut tumani
-  SAYXUNOBOD // Sayxunobod tumani
-  GULISTON // Dehqonobod markazi bilan
-  SARDOBA // Sardoba tumani
-  OQOLTIN // Oqoltin tumani
-  MIRZAOBOD // Mirzaobod tumani
-  XAVAST // Xavast tumani
-  SIRDARYO_TUMANI // Sirdaryo tumani
-}
-
+// Ariza holatlari
 enum Status_Flow {
   PENDING
   ASSIGNED
   IN_PROGRESS
   COMPLETED
   REJECTED
+}
+
+// Sirdaryo viloyati bo'yicha tuman/shaharlar ro'yxati
+enum District {
+  GULISTON_SHAHAR
+  YANGIYER_SHAHAR
+  SHIRIN_SHAHAR
+  GULISTON_TUMANI
+  BOYOVUT_TUMANI
+  SAYXUNOBOD_TUMANI
+  MIRZAOBOD_TUMANI
+  OQOLTIN_TUMANI
+  SARD_OBA_TUMANI
+  XOVOS_TUMANI
+  SARDOBA_TUMANI
 }
 
 //  Users modeli
@@ -54,8 +54,8 @@ model Users {
   temp_house        String?
   temp_address      String?
   temp_description  String?
-  temp_photo        String?
-
+  temp_photos       Json?      // Bir nechta rasmlar uchun file_id massivi
+  
   role              jekRoles   @default(User)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
@@ -68,23 +68,25 @@ model Users {
 
 model Admins {
   id           String     @id @default(uuid())
-  first_name   String
-  last_name    String
-  phoneNumber  String     @unique
-  password     String
-  address      District // Hudud (Dropdown'dan keladi)
+  first_name   String     @db.VarChar(50)
+  last_name    String     @db.VarChar(50)
+  password     String     @db.VarChar(255)
+  phoneNumber  String     @unique @db.VarChar(20)
+  district     District   // Biriktirilgan hudud
+  address      String     @db.VarChar(255)
   role         jekRoles   @default(JEK)
-  isActive     Boolean?   @default(false)
-  jti          String
-  refreshToken String?
+  isActive     Boolean    @default(false)
+  refreshToken String?    @db.Text
+  jti          String?    @db.VarChar(255)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  requests     Requests[]
+
+  assignedRequests Requests[]
 
   @@map("admins")
 }
 
-// Requests modeli
+// Murojaat modeli (Requests)
 
 model Requests {
   id               String      @id @default(uuid())
@@ -97,7 +99,6 @@ model Requests {
   description      String      @db.Text
   status           Status_Flow @default(PENDING)
   district         District    // Hudud (Enum)
-  photo_url        String?     
   note             String?     @db.Text
   rejection_reason String?     @db.Text
   completedAt      DateTime?
@@ -129,22 +130,18 @@ model RequestPhoto {
   @@map("request_photos")
 }
 
-// Status o'zgarish tarixi (RequestStatusLog)
+// Holat o'zgarishi loglari (RequestStatusLog)
 
 model RequestStatusLog {
-  id         String   @id @default(uuid())
-  request_id String
-  request    Requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
-
-  old_status Status_Flow?
-  new_status Status_Flow
-
-  changed_by_role String @db.VarChar(20)
-  changed_by_id   String
-
-  note String? @db.Text
-
-  created_at DateTime @default(now())
+  id              String      @id @default(uuid())
+  request_id      String
+  request         Requests    @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  old_status      Status_Flow
+  new_status      Status_Flow
+  changed_by_role String      @db.VarChar(50)
+  changed_by_id   String      @db.VarChar(50)
+  note            String?     @db.Text
+  createdAt       DateTime    @default(now())
 
   @@map("request_status_logs")
 }
