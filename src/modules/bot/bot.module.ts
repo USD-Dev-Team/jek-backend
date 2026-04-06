@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigService } from '@nestjs/config';
 import { BotUpdate } from './bot.update';
 import { BotService } from './bot.service';
 import { BotFlowService } from './bot-flow.service';
 
+@Global()
 @Module({
     imports: [
         TelegrafModule.forRootAsync({
@@ -15,5 +16,6 @@ import { BotFlowService } from './bot-flow.service';
         }),
     ],
     providers: [BotUpdate, BotService, BotFlowService],
+    exports: [BotService, BotFlowService],
 })
 export class BotModule { }

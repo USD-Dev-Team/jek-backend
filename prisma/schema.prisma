@@ -16,10 +16,11 @@ enum jekRoles {
 // Ariza holatlari
 enum Status_Flow {
   PENDING
-  ASSIGNED
   IN_PROGRESS
   COMPLETED
+  JEK_COMPLETED
   REJECTED
+  JEK_REJECTED
 }
 
 // Sirdaryo viloyati bo'yicha tuman/shaharlar ro'yxati
@@ -55,6 +56,7 @@ model Users {
   temp_address      String?
   temp_description  String?
   temp_photos       Json?      // Bir nechta rasmlar uchun file_id massivi
+  temp_reject_request_id String?   // E'tiroz bildirilayotgan ariza ID-si
   
   role              jekRoles   @default(User)
   createdAt         DateTime   @default(now())

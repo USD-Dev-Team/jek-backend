@@ -3,6 +3,9 @@ import { PrismaService } from 'src/core/database/prisma.service';
 import { MediaService } from '../media/media.service';
 import { ConfigService } from '@nestjs/config';
 import { RequestPhotosService } from '../request-photos/request-photos.service';
+import { InjectBot } from 'nestjs-telegraf';
+import { Telegraf, Context, Markup } from 'telegraf';
+import { Status_Flow } from '@prisma/client';
 
 @Injectable()
 export class BotService {
@@ -12,8 +15,76 @@ export class BotService {
         private readonly prisma: PrismaService,
         private readonly mediaService: MediaService,
         private readonly configService: ConfigService,
-        private readonly requestPhotosService: RequestPhotosService
+        private readonly requestPhotosService: RequestPhotosService,
+        @InjectBot() private bot: Telegraf<Context>
     ) { }
+
+    /**
+     * Foydalanuvchiga Telegram orqali xabar yuboradi
+     */
+    async sendNotification(telegramId: bigint, message: string) {
+        try {
+            await this.bot.telegram.sendMessage(Number(telegramId), message, { parse_mode: 'HTML' });
+            this.logger.log(`Notification sent to user ${telegramId}`);
+        } catch (error) {
+            this.logger.error(`Error sending notification to user ${telegramId}:`, error);
+        }
+    }
+
+    /**
+     * Foydalanuvchiga tugmalar bilan bildirishnoma yuboradi
+     */
+    async sendNotificationWithButtons(telegramId: bigint, message: string, buttons: any) {
+        try {
+            await this.bot.telegram.sendMessage(Number(telegramId), message, {
+                parse_mode: 'HTML',
+                reply_markup: buttons.reply_markup || buttons
+            });
+            this.logger.log(`Notification with buttons sent to user ${telegramId}`);
+        } catch (error) {
+            this.logger.error(`Error sending button-notification to user ${telegramId}:`, error);
+        }
+    }
+
+    /**
+     * Ariza statusini o'zgartiradi
+     */
+    async updateRequestStatus(requestId: string, status: Status_Flow) {
+        return this.prisma.requests.update({
+            where: { id: requestId },
+            data: { status }
+        });
+    }
+
+    /**
+     * Foydalanuvchi e'tirozini qayta ishlaydi va arizani PENDING holatiga qaytaradi
+     */
+    async processUserRejection(requestId: string, reason: string, telegramId: number) {
+        const request = await this.prisma.requests.findUnique({ where: { id: requestId } });
+        if (!request) throw new Error('Request not found');
+
+        // Arizani PENDING holatiga qaytarish va e'tiroz sababini note-ga yozish
+        await this.prisma.requests.update({
+            where: { id: requestId },
+            data: {
+                status: 'PENDING' as Status_Flow,
+                note: reason, // Foydalanuvchi e'tirozini note sifatida saqlash
+                rejection_reason: null // Eski rad etish sababini o'chirib tashlash
+            } as any
+        });
+
+        // Log yaratish
+        await this.prisma.requestStatusLog.create({
+            data: {
+                request_id: requestId,
+                old_status: request.status,
+                new_status: 'PENDING',
+                changed_by_role: 'USER',
+                changed_by_id: String(telegramId),
+                note: reason,
+            },
+        });
+    }
 
     async findOrCreateUser(telegramId: number) {
         let user: any = await this.prisma.users.findUnique({
@@ -81,7 +152,7 @@ export class BotService {
             this.prisma.requests.findMany({
                 where: {
                     user_id: user.id,
-                    status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] }
+                    status: { in: ['PENDING', 'IN_PROGRESS', 'JEK_COMPLETED', 'JEK_REJECTED', 'COMPLETED'] as Status_Flow[] }
                 },
                 select: {
                     id: true,
@@ -96,7 +167,7 @@ export class BotService {
             this.prisma.requests.count({
                 where: {
                     user_id: user.id,
-                    status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] }
+                    status: { in: ['PENDING', 'IN_PROGRESS', 'JEK_COMPLETED', 'JEK_REJECTED', 'COMPLETED'] as Status_Flow[] }
                 },
             }),
         ]);
@@ -132,7 +203,7 @@ export class BotService {
                 district: user.temp_district,
                 address: user.temp_address,
                 description: user.temp_description,
-                status: 'PENDING',
+                status: 'PENDING' as Status_Flow,
             } as any,
         });
 

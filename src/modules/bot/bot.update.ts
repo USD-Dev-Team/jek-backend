@@ -86,20 +86,66 @@ export class BotUpdate {
             }
 
             await ctx.deleteMessage().catch(() => { });
-            let message = `📄 *Ariza tafsilotlari:* #${req.request_number}\n\n📍 Hudud: ${req.district.replace('_', ' ')}\n🏠 Manzil: ${req.address}\n📝 Muammo: ${req.description}\n⏳ Holat: ${req.status}\n📅 Sana: ${req.createdAt.toLocaleDateString()}\n`;
-            const keyboard = Markup.inlineKeyboard([[Markup.button.callback('⬅️ Ro\'yxatga qaytish', `requests_page_${page}`)]]);
+            let message = `📄 <b>Ariza tafsilotlari:</b> #${req.request_number}\n\n📍 Hudud: ${req.district.replace('_', ' ')}\n🏠 Manzil: ${req.address}\n📝 Muammo: ${req.description}\n⏳ Holat: ${req.status}\n`;
+            if (req.note) message += `💬 Izoh: ${req.note}\n`;
+            if (req.rejection_reason) message += `⚠️ Rad etish sababi: ${req.rejection_reason}\n`;
+            message += `📅 Sana: ${req.createdAt.toLocaleDateString()}\n`;
+
+            const buttons: any[] = [];
+
+            // Agar ariza JEK tomonidan ko'rib chiqilgan bo'lsa, tugmalarni qo'shish
+            if (req.status === 'JEK_COMPLETED' || req.status === 'JEK_REJECTED') {
+                buttons.push([Markup.button.callback('✅ Tasdiqlash', `user_confirm_req_${req.id}`)]);
+                buttons.push([Markup.button.callback('❌ E\'tiroz bildirish', `user_reject_req_${req.id}`)]);
+            }
+
+            buttons.push([Markup.button.callback('⬅️ Ro\'yxatga qaytish', `requests_page_${page}`)]);
+            const keyboard = Markup.inlineKeyboard(buttons);
 
             const firstPhoto = req.requestPhotos?.[0];
             if (firstPhoto) {
                 const photoPath = require('path').join(process.cwd(), firstPhoto.file_url.startsWith('/') ? firstPhoto.file_url.substring(1) : firstPhoto.file_url);
-                await ctx.replyWithPhoto({ source: photoPath }, { caption: message, parse_mode: 'Markdown', ...keyboard });
+                await ctx.replyWithPhoto({ source: photoPath }, { caption: message, parse_mode: 'HTML', ...keyboard });
             } else {
-                await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+                await ctx.reply(message, { parse_mode: 'HTML', ...keyboard });
             }
             await ctx.answerCbQuery();
             return;
         } catch (error) {
             this.logger.error('Error onViewRequest:', error);
+            return;
+        }
+    }
+
+    @Action(/^user_confirm_req_/)
+    async onUserConfirm(ctx: Context) {
+        if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+        try {
+            const requestId = (ctx.callbackQuery as any).data.replace('user_confirm_req_', '');
+            await this.botService.updateRequestStatus(requestId, 'COMPLETED');
+            await ctx.answerCbQuery('Murojaat yakunlandi. Rahmat!');
+            await ctx.editMessageText('✅ Siz ushbu murojaat yopilishini tasdiqladingiz. Rahmat!');
+            return;
+        } catch (error) {
+            this.logger.error('Error onUserConfirm:', error);
+            return;
+        }
+    }
+
+    @Action(/^user_reject_req_/)
+    async onUserReject(ctx: Context) {
+        if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+        try {
+            const requestId = (ctx.callbackQuery as any).data.replace('user_reject_req_', '');
+            await this.botService.updateUserData(ctx.from.id, {
+                registration_step: 'REQ_USER_REJECTION_REASON',
+                temp_reject_request_id: requestId
+            });
+            await ctx.answerCbQuery();
+            await ctx.reply('Iltimos, e\'tirozingiz sababini yozib qoldiring:');
+            return;
+        } catch (error) {
+            this.logger.error('Error onUserReject:', error);
             return;
         }
     }
@@ -116,9 +162,26 @@ export class BotUpdate {
                 await this.botService.updateUserData(ctx.from.id, {
                     registration_step: 'COMPLETED',
                     temp_district: null, temp_mahalla: null, temp_street: null,
-                    temp_house: null, temp_address: null, temp_description: null, temp_photos: null
+                    temp_house: null, temp_address: null, temp_description: null, temp_photos: null,
+                    temp_reject_request_id: null
                 });
                 await ctx.reply('Jarayon bekor qilindi.', this.botFlowService.mainMenu());
+                return;
+            }
+
+            // E'tiroz sababini qabul qilish
+            if (user.registration_step === 'REQ_USER_REJECTION_REASON') {
+                if (!text) {
+                    await ctx.reply('Iltimos, e\'tiroz sababini matn ko\'rinishida yozing:');
+                    return;
+                }
+                const requestId = user.temp_reject_request_id;
+                await this.botService.processUserRejection(requestId, text, ctx.from.id);
+                await this.botService.updateUserData(ctx.from.id, {
+                    registration_step: 'COMPLETED',
+                    temp_reject_request_id: null
+                });
+                await ctx.reply('E\'tirozingiz qabul qilindi. Ariza qayta ko\'rib chiqish uchun PENDING holatiga o\'tkazildi.', this.botFlowService.mainMenu());
                 return;
             }
 
@@ -174,12 +237,12 @@ export class BotUpdate {
             return;
         }
 
-        let message = `📋 *Sizning faol arizalaringiz* (Jami: ${total})\n\n`;
+        let message = `📋 <b>Sizning faol arizalaringiz</b> (Jami: ${total})\n\n`;
         const actionRow: any[] = [];
         requests.forEach((req: any, index: number) => {
-            const statusEmoji = req.status === 'COMPLETED' ? '✅' : (req.status === 'REJECTED' ? '❌' : '⏳');
+            const statusEmoji = req.status === 'COMPLETED' || req.status === 'JEK_COMPLETED' ? '✅' : (req.status === 'REJECTED' || req.status === 'JEK_REJECTED' ? '❌' : '⏳');
             const rowNum = (page - 1) * 5 + index + 1;
-            message += `${rowNum}. *#${req.request_number}*\n📝 Holat: ${statusEmoji} ${req.status}\n📅 Sana: ${req.createdAt.toLocaleDateString()}\n\n`;
+            message += `${rowNum}. <b>#${req.request_number}</b>\n📝 Holat: ${statusEmoji} ${req.status}\n📅 Sana: ${req.createdAt.toLocaleDateString()}\n\n`;
             actionRow.push(Markup.button.callback(`${rowNum}`, `view_req_${req.id}_p_${page}`));
         });
 
@@ -191,9 +254,9 @@ export class BotUpdate {
 
         const keyboard = Markup.inlineKeyboard(buttons);
         if (isEdit) {
-            await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
+            await ctx.editMessageText(message, { parse_mode: 'HTML', ...keyboard });
         } else {
-            await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+            await ctx.reply(message, { parse_mode: 'HTML', ...keyboard });
         }
         return;
     }

@@ -160,9 +160,9 @@ export class BotFlowService {
     async showConfirmationSummary(ctx: Context) {
         const latestUser: any = await this.botService.findOrCreateUser(ctx.from!.id);
         const photoCount = Array.isArray(latestUser.temp_photos) ? latestUser.temp_photos.length : 0;
-        const summary = `📄 *Murojaatni tasdiqlaysizmi?*\n\n📍 Hudud: ${latestUser.temp_district?.replace('_', ' ')}\n🏠 Manzil: ${latestUser.temp_address}\n📝 Muammo: ${latestUser.temp_description}\n📸 Rasmlar soni: ${photoCount} ta`;
+        const summary = `📄 <b>Murojaatni tasdiqlaysizmi?</b>\n\n📍 Hudud: ${latestUser.temp_district?.replace('_', ' ')}\n🏠 Manzil: ${latestUser.temp_address}\n📝 Muammo: ${latestUser.temp_description}\n📸 Rasmlar soni: ${photoCount} ta`;
         await ctx.reply(summary, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...Markup.keyboard([['✅ Tasdiqlash', '❌ Bekor qilish']]).oneTime().resize()
         });
     }

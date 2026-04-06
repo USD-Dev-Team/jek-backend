@@ -5,7 +5,7 @@ import { PrismaService } from 'src/core/database/prisma.service';
 export class RequestPhotosService {
     constructor(private readonly prisma: PrismaService) { }
 
-    async createMany(requestId: string, photos: { file_url: string; telegram_file_id: string }[]) {
+    async createMany(requestId: string, photos: { file_url: string; telegram_file_id: string | null }[]) {
         return this.prisma.requestPhoto.createMany({
             data: photos.map(p => ({
                 request_id: requestId,
