@@ -3,37 +3,31 @@ import {
   IsString,
   IsPhoneNumber,
   MinLength,
-  IsEnum,
   IsNotEmpty,
   Matches,
+  IsArray,
 } from 'class-validator';
-import { District } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateAdminDto {
-  @ApiProperty()
+  @ApiProperty({ default: 'Alisher' })
   @IsOptional()
   @IsString()
   first_name?: string;
 
-  @ApiProperty()
+  @ApiProperty({ default: 'Valiyev' })
   @IsOptional()
   @IsString()
   last_name?: string;
 
-  @ApiProperty()
+  @ApiProperty({ default: '+998951111111' })
   @IsOptional()
   @IsPhoneNumber('UZ', { message: "Telefon raqami noto'g'ri formatda" })
   phoneNumber?: string;
-
-  @ApiProperty()
-  @IsOptional()
-  @IsEnum(District, { message: "Noto'g'ri tuman tanlandi" })
-  address?: District;
 }
 
 export class ChangePasswordDto {
-  @ApiProperty()
+  @ApiProperty({ default: 'a12345678' })
   @IsNotEmpty({ message: 'Parol majburiy' })
   @MinLength(8, { message: "Parol kamida 8 ta belgidan iborat bo'lishi kerak" })
   @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[a-zA-Z]).*$/, {
@@ -41,14 +35,14 @@ export class ChangePasswordDto {
   })
   password: string;
 
-  @ApiProperty()
+  @ApiProperty({ default: 'a12345678' })
   @IsNotEmpty({ message: 'Parolni tasdiqlash majburiy' })
   @IsString()
   passwordConfirm: string;
 }
 
 export class updateStatusDto {
-  @ApiProperty()
+  @ApiProperty({ default: true })
   @IsNotEmpty()
   isActive: boolean;
 }

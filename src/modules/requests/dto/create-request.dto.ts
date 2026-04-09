@@ -7,8 +7,6 @@ import {
     MaxLength,
     IsEnum,
 } from 'class-validator';
-import { District } from '@prisma/client';
-
 export class CreateRequestDto {
     @ApiProperty({
         example: '123456789',
@@ -19,13 +17,33 @@ export class CreateRequestDto {
     telegram_id: string;
 
     @ApiProperty({
-        example: 'Toshkent sh., Yunusobod tumani, 19-kvartal, 1-uy',
-        description: 'Arizaning aniq manzili',
+        example: 'Nurafshon MFY, Paxtakor ko\'chasi, 15-uy',
+        description: 'Arizaning to\'liq manzili',
     })
-    @IsNotEmpty({ message: 'Manzil kiritilishi shart' })
+    @IsNotEmpty({ message: 'To\'liq manzil kiritilishi shart' })
     @IsString()
-    @MaxLength(255)
+    @MaxLength(500)
     address: string;
+
+    @ApiProperty({ example: 'Guliston tumani' })
+    @IsNotEmpty({ message: 'Tuman kiritilishi shart' })
+    @IsString()
+    district: string;
+
+    @ApiProperty({ example: 'Nurafshon' })
+    @IsNotEmpty({ message: 'Mahalla kiritilishi shart' })
+    @IsString()
+    mahalla: string;
+
+    @ApiProperty({ example: 'Paxtakor', required: false })
+    @IsOptional()
+    @IsString()
+    street?: string;
+
+    @ApiProperty({ example: '15', required: false })
+    @IsOptional()
+    @IsString()
+    house?: string;
 
     @ApiProperty({
         example: 41.311081,
@@ -46,16 +64,7 @@ export class CreateRequestDto {
     longitude?: number;
 
     @ApiProperty({
-        example: 'GULISTON_SHAHAR',
-        enum: District,
-        description: 'Tuman yoki shahar nomi (Enum)',
-    })
-    @IsNotEmpty({ message: 'Hudud kiritilishi shart' })
-    @IsEnum(District, { message: "Noto'g'ri hudud kiritildi" })
-    district: District;
-
-    @ApiProperty({
-        example: "Uyimiz oldidagi ko'cha chirog'i sinib qolgan, iltimos tuzatib bering.",
+        example: "Uyimiz oldidagi ko'cha chirog'i sinib qolgan...",
         description: 'Muammo haqida batafsil ma\'lumot',
     })
     @IsNotEmpty({ message: 'Tavsif kiritilishi shart' })

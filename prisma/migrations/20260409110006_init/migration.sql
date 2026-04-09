@@ -1,11 +1,8 @@
 -- CreateEnum
-CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'INSPECTION');
+CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'Admin');
 
 -- CreateEnum
-CREATE TYPE "Status_Flow" AS ENUM ('PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED');
-
--- CreateEnum
-CREATE TYPE "District" AS ENUM ('GULISTON_SHAHAR', 'YANGIYER_SHAHAR', 'SHIRIN_SHAHAR', 'GULISTON_TUMANI', 'BOYOVUT_TUMANI', 'SAYXUNOBOD_TUMANI', 'MIRZAOBOD_TUMANI', 'OQOLTIN_TUMANI', 'SARD_OBA_TUMANI', 'XOVOS_TUMANI', 'SARDOBA_TUMANI');
+CREATE TYPE "Status_Flow" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'JEK_COMPLETED', 'REJECTED', 'JEK_REJECTED');
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -14,15 +11,16 @@ CREATE TABLE "users" (
     "first_name" TEXT,
     "last_name" TEXT,
     "phoneNumber" TEXT,
+    "role" "jekRoles" NOT NULL DEFAULT 'User',
     "registration_step" TEXT DEFAULT 'START',
-    "temp_district" "District",
+    "temp_district" TEXT,
     "temp_mahalla" TEXT,
     "temp_street" TEXT,
     "temp_house" TEXT,
     "temp_address" TEXT,
     "temp_description" TEXT,
     "temp_photos" JSONB,
-    "role" "jekRoles" NOT NULL DEFAULT 'User',
+    "temp_reject_request_id" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -36,8 +34,6 @@ CREATE TABLE "admins" (
     "last_name" VARCHAR(50) NOT NULL,
     "password" VARCHAR(255) NOT NULL,
     "phoneNumber" VARCHAR(20) NOT NULL,
-    "district" "District" NOT NULL,
-    "address" VARCHAR(255) NOT NULL,
     "role" "jekRoles" NOT NULL DEFAULT 'JEK',
     "isActive" BOOLEAN NOT NULL DEFAULT false,
     "refreshToken" TEXT,
@@ -53,13 +49,12 @@ CREATE TABLE "requests" (
     "id" TEXT NOT NULL,
     "request_number" VARCHAR(20) NOT NULL,
     "user_id" TEXT NOT NULL,
-    "address" VARCHAR(255) NOT NULL,
+    "address_id" TEXT NOT NULL,
     "assigned_jek_id" TEXT,
     "latitude" DECIMAL(10,8),
     "longitude" DECIMAL(11,8),
     "description" TEXT NOT NULL,
     "status" "Status_Flow" NOT NULL DEFAULT 'PENDING',
-    "district" "District" NOT NULL,
     "note" TEXT,
     "rejection_reason" TEXT,
     "completedAt" TIMESTAMP(3),
@@ -95,6 +90,30 @@ CREATE TABLE "request_status_logs" (
     CONSTRAINT "request_status_logs_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "addresses" (
+    "id" TEXT NOT NULL,
+    "district" TEXT NOT NULL,
+    "neighborhood" TEXT NOT NULL,
+    "street" TEXT,
+    "house" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "addresses_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "admin_addresses" (
+    "id" TEXT NOT NULL,
+    "admin_id" TEXT NOT NULL,
+    "address_id" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "admin_addresses_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_telegram_id_key" ON "users"("telegram_id");
 
@@ -107,6 +126,15 @@ CREATE UNIQUE INDEX "admins_phoneNumber_key" ON "admins"("phoneNumber");
 -- CreateIndex
 CREATE UNIQUE INDEX "requests_request_number_key" ON "requests"("request_number");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "addresses_district_neighborhood_street_house_key" ON "addresses"("district", "neighborhood", "street", "house");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "admin_addresses_admin_id_address_id_key" ON "admin_addresses"("admin_id", "address_id");
+
+-- AddForeignKey
+ALTER TABLE "requests" ADD CONSTRAINT "requests_address_id_fkey" FOREIGN KEY ("address_id") REFERENCES "addresses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
 -- AddForeignKey
 ALTER TABLE "requests" ADD CONSTRAINT "requests_assigned_jek_id_fkey" FOREIGN KEY ("assigned_jek_id") REFERENCES "admins"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -118,3 +146,9 @@ ALTER TABLE "request_photos" ADD CONSTRAINT "request_photos_request_id_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "request_status_logs" ADD CONSTRAINT "request_status_logs_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "requests"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "admin_addresses" ADD CONSTRAINT "admin_addresses_admin_id_fkey" FOREIGN KEY ("admin_id") REFERENCES "admins"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "admin_addresses" ADD CONSTRAINT "admin_addresses_address_id_fkey" FOREIGN KEY ("address_id") REFERENCES "addresses"("id") ON DELETE CASCADE ON UPDATE CASCADE;

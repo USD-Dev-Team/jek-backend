@@ -19,14 +19,14 @@ export class RequestPhotosController {
     ) { }
 
     @Get(':requestId')
-    @Roles(jekRoles.JEK, jekRoles.INSPECTION)
+    @Roles('JEK', 'INSPECTION')
     @ApiOperation({ summary: 'Arizaga tegishli barcha rasmlarni olish (Xodimlar uchun)' })
     async getPhotosByRequestId(@Param('requestId') requestId: string) {
         return this.requestPhotosService.findByRequestId(requestId);
     }
 
     @Post('upload/:requestId')
-    @Roles(jekRoles.JEK, jekRoles.INSPECTION)
+    @Roles('JEK', 'INSPECTION')
     @UseInterceptors(FileInterceptor('file'))
     @ApiConsumes('multipart/form-data')
     @ApiBody({

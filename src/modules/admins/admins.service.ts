@@ -15,6 +15,7 @@ import * as bcrypt from 'bcrypt';
 export class AdminsService {
   constructor(private readonly prisma: PrismaService) { }
 
+  //Admin profilini ko'rish
   async findSelf(id: string) {
     const existJek = await this.prisma.admins.findUnique({
       where: { id },
@@ -22,10 +23,13 @@ export class AdminsService {
         first_name: true,
         last_name: true,
         phoneNumber: true,
-        address: true,
-        district: true,
         role: true,
-        isActive: true
+        isActive: true,
+        addresses: {
+          include: {
+            address: true
+          }
+        }
       } as any,
     });
     if (!existJek) {
@@ -55,8 +59,6 @@ export class AdminsService {
           first_name: true,
           last_name: true,
           phoneNumber: true,
-          address: true,
-          district: true,
           role: true,
         } as any,
       }),
@@ -68,19 +70,17 @@ export class AdminsService {
     if (!existJek) {
       throw new NotFoundException('Employee not found');
     }
-    if (existJek.isActive === updateStatus.isActive) {
-      throw new BadRequestException(
-        `The employee is already in the ${updateStatus.isActive ? 'active' : 'inactive'} state`,
-      );
-    }
 
     await this.prisma.admins.update({
       where: { id },
       data: { isActive: updateStatus.isActive },
     });
+
     return {
       success: true,
-      message: 'Employee status changed successfully',
+      message: updateStatus.isActive
+        ? 'Xodim faollashtirildi'
+        : 'Xodim nofaol holatga o\'tkazildi',
     };
   }
 
@@ -110,10 +110,9 @@ export class AdminsService {
         first_name: true,
         last_name: true,
         phoneNumber: true,
-        district: true,
         role: true,
         isActive: true,
-        createdAt: true
+        createdAt: true,
       } as any,
       orderBy: { createdAt: 'desc' }
     });
@@ -124,6 +123,31 @@ export class AdminsService {
     };
   }
 
+  async findOne(id: string) {
+    const existJek = await this.prisma.admins.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        phoneNumber: true,
+        role: true,
+        isActive: true,
+        addresses: {
+          select: {
+            address: true
+          }
+        }
+      } as any,
+    });
+    if (!existJek) {
+      throw new NotFoundException('Employee not found');
+    }
+    return {
+      success: true,
+      data: existJek,
+    };
+  }
   remove(id: number) {
     return `This action removes a #${id} admin`;
   }

@@ -47,11 +47,10 @@ export class AuthService {
                 last_name: registerDto.last_name,
                 password: hashPassword,
                 phoneNumber: finalPhone,
-                district: registerDto.address,
-                address: (registerDto.address as string).replace('_', ' '),
                 jti,
+                isActive: false, // Ro'yxatdan o'tganda nofaol bo'ladi
             } as any,
-            select: { phoneNumber: true, id: true, role: true, jti: true, first_name: true, last_name: true, district: true, address: true } as any,
+            select: { phoneNumber: true, id: true, role: true, jti: true, first_name: true, last_name: true } as any,
         });
 
         const payload = {
@@ -73,11 +72,12 @@ export class AuthService {
         return {
             message: 'Muvofaqiyatli ro\'yxatdan o\'tdingiz',
             userId: newJek.id,
+            role: newJek.role,
             refreshToken,
             accessToken,
         };
     }
- 
+
     async login(loginDto: LoginDto) {
         const cleanPhone = loginDto.phoneNumber.replace(/\D/g, '');
 
@@ -126,8 +126,9 @@ export class AuthService {
         });
 
         return {
-            message: 'Login muvofaqiyatli amalga oshdi',
+            message: 'Login muvaffaqiyatli amalga oshdi',
             userId: existJek.id,
+            role: existJek.role,
             refreshToken,
             accessToken,
         };

@@ -1,13 +1,28 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Context, Markup } from 'telegraf';
 import { BotService } from './bot.service';
-import { District } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class BotFlowService {
     private readonly logger = new Logger(BotFlowService.name);
+    private mahallaData: any;
 
-    constructor(private readonly botService: BotService) { }
+    constructor(private readonly botService: BotService) {
+        this.loadMahallaData();
+    }
+
+    private loadMahallaData() {
+        try {
+            const filePath = path.join(process.cwd(), 'mahallas.json');
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            this.mahallaData = JSON.parse(fileContent);
+        } catch (error) {
+            this.logger.error('Error loading mahallas.json:', error);
+            this.mahallaData = { addresses: [], mahallas: {} };
+        }
+    }
 
     /**
      * Foydalanuvchini ro'yxatdan o'tkazish (FIRST_NAME, LAST_NAME, PHONE_NUMBER)
@@ -68,12 +83,8 @@ export class BotFlowService {
 
             case 'REQ_MAHALLA':
                 if (text === '❌ Bekor qilish') return;
-                if (!text) {
-                    await ctx.reply('Iltimos, mahalla nomini kiriting:');
-                    return;
-                }
-                await this.botService.updateUserData(userId, { temp_mahalla: text, registration_step: 'REQ_STREET' });
-                await ctx.reply('Ko\'cha nomini kiriting:');
+                const userData: any = await this.botService.findOrCreateUser(userId);
+                await ctx.reply('Iltimos, yuqoridagi tugmalardan mahallani tanlang:', this.mahallaMenu(userData.temp_district));
                 return;
 
             case 'REQ_STREET':
@@ -175,8 +186,15 @@ export class BotFlowService {
     }
 
     districtMenu() {
-        const districts = Object.values(District);
-        const buttons = districts.map(d => Markup.button.callback(d.replace('_', ' '), `district_${d}`));
+        const districts = this.mahallaData.addresses;
+        const buttons = districts.map(d => Markup.button.callback(d, `dist_${d}`));
+        return Markup.inlineKeyboard(buttons, { columns: 2 });
+    }
+
+    mahallaMenu(districtName: string) {
+        const mahallas = this.mahallaData.mahallas[districtName] || [];
+        // Callback data limit is 64 bytes. Mahalla names are usually short enough.
+        const buttons = mahallas.map((m: string) => Markup.button.callback(m, `mhl_${m}`));
         return Markup.inlineKeyboard(buttons, { columns: 2 });
     }
 }

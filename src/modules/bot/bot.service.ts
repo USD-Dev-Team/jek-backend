@@ -3,6 +3,7 @@ import { PrismaService } from 'src/core/database/prisma.service';
 import { MediaService } from '../media/media.service';
 import { ConfigService } from '@nestjs/config';
 import { RequestPhotosService } from '../request-photos/request-photos.service';
+import { AddressesService } from '../addresses/addresses.service';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { Status_Flow } from '@prisma/client';
@@ -16,6 +17,7 @@ export class BotService {
         private readonly mediaService: MediaService,
         private readonly configService: ConfigService,
         private readonly requestPhotosService: RequestPhotosService,
+        private readonly addressesService: AddressesService,
         @InjectBot() private bot: Telegraf<Context>
     ) { }
 
@@ -179,8 +181,9 @@ export class BotService {
         return this.prisma.requests.findUnique({
             where: { id: requestId },
             include: {
-                requestPhotos: true
-            }
+                requestPhotos: true,
+                address: true, // Manzilni ham olish
+            } as any
         });
     }
 
@@ -189,9 +192,16 @@ export class BotService {
             where: { telegram_id: BigInt(telegramId) } as any,
         });
 
-        if (!user || !user.temp_district || !user.temp_address || !user.temp_description) {
+        if (!user || !user.temp_district || !user.temp_mahalla || !user.temp_description) {
             throw new Error('Incomplete data for request');
         }
+
+        const addr = await this.addressesService.findOrCreateAddress({
+            district: user.temp_district,
+            neighborhood: user.temp_mahalla,
+            street: user.temp_street,
+            house: user.temp_house
+        });
 
         const requestNumber = await this.generateRequestNumber();
         const botToken = this.configService.get<string>('BOT_TOKEN');
@@ -200,12 +210,15 @@ export class BotService {
             data: {
                 request_number: requestNumber,
                 user_id: user.id,
-                district: user.temp_district,
-                address: user.temp_address,
+                address_id: addr.id,
                 description: user.temp_description,
                 status: 'PENDING' as Status_Flow,
+                latitude: user.latitude, // Agar bo'lsa
+                longitude: user.longitude, // Agar bo'lsa
             } as any,
         });
+
+        // ... rasm yuklash qismi qoladi ...
 
         if (Array.isArray(user.temp_photos) && botToken) {
             const photosToCreate: any[] = [];

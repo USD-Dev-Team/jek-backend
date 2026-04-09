@@ -28,7 +28,9 @@ export class TokenGuard implements CanActivate {
       token = req.query.token as string;
     }
 
-    if (!token) throw new UnauthorizedException('Token topilmadi');
+    if (!token) {
+      throw new UnauthorizedException('Token topilmadi');
+    }
 
     try {
       const payload = await this.jwt.verifyAsync(token, {
@@ -46,7 +48,16 @@ export class TokenGuard implements CanActivate {
         // Id orqali bazadan kerakli malumotlarni o'qiymiz (district ham kerak)
         user = await this.prisma.admins.findUnique({
           where: { id: payload.id },
-          select: { id: true, role: true, isActive: true, district: true, address: true },
+          select: {
+            id: true,
+            role: true,
+            isActive: true,
+            addresses: {
+              include: {
+                address: true
+              }
+            }
+          } as any,
         });
       }
 

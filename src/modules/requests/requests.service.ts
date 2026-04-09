@@ -1,19 +1,21 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { CreateRequestDto } from './dto/create-request.dto';
-import { District, Status_Flow } from '@prisma/client';
+import { Status_Flow } from '@prisma/client';
 import { BotService } from '../bot/bot.service';
+import { AddressesService } from '../addresses/addresses.service';
 import { Markup } from 'telegraf';
 
 @Injectable()
 export class RequestsService {
     constructor(
         private readonly prisma: PrismaService,
-        private readonly botService: BotService
+        private readonly botService: BotService,
+        private readonly addressesService: AddressesService
     ) { }
 
     async create(createRequestDto: CreateRequestDto) {
-        const { telegram_id, address, latitude, longitude, description, district } = createRequestDto;
+        const { telegram_id, address, latitude, longitude, description, district, mahalla, street, house } = createRequestDto;
 
         const user = await this.prisma.users.findFirst({
             where: { telegram_id: BigInt(telegram_id) },
@@ -23,20 +25,26 @@ export class RequestsService {
             throw new ConflictException('Foydalanuvchi topilmadi. Avval ro\'yxatdan o\'ting.');
         }
 
+        const addr = await this.addressesService.findOrCreateAddress({
+            district,
+            neighborhood: mahalla,
+            street,
+            house
+        });
+
         const requestNumber = await this.generateRequestNumber();
 
         const request = await this.prisma.requests.create({
             data: {
                 request_number: requestNumber,
                 user_id: user.id,
-                address,
-                district,
+                address_id: addr.id,
                 latitude,
                 longitude,
                 description,
                 status: 'PENDING',
             } as any,
-        });
+        } as any);
 
         return {
             success: true,
@@ -45,40 +53,95 @@ export class RequestsService {
         };
     }
 
-    async findPendingByDistrict(district: District) {
-        return this.prisma.requests.findMany({
-            where: {
-                district,
-                status: 'PENDING',
-            },
-            select: {
-                id: true,
-                createdAt: true,
-                address: true,
-                requestPhotos: true,
-                description: true,
-                status: true,
-                request_number: true
-            },
+    async findPendingForJek(jekId: string, page: number = 1, limit: number = 10) {
+        const skip = (page - 1) * limit;
+
+        // 1. Xodimga biriktirilgan mahallalarni olish
+        const admin = await (this.prisma.admins as any).findUnique({
+            where: { id: jekId },
+            include: {
+                addresses: {
+                    include: { address: true }
+                }
+            }
         });
+
+        if (!admin) throw new ConflictException('Xodim topilmadi');
+
+        // Barcha biriktirilgan mahalla nomlarini massivga yig'ish
+        const neighborhoodNames = admin.addresses.map(a => a.address.neighborhood);
+
+        const [requests, total] = await Promise.all([
+            this.prisma.requests.findMany({
+                where: {
+                    address: {
+                        neighborhood: { in: neighborhoodNames }
+                    } as any,
+                    status: 'PENDING',
+                },
+                include: {
+                    address: true,
+                    requestPhotos: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            } as any),
+            this.prisma.requests.count({
+                where: {
+                    address: {
+                        neighborhood: { in: neighborhoodNames }
+                    } as any,
+                    status: 'PENDING',
+                },
+            } as any),
+        ]);
+
+        return {
+            data: requests,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        };
     }
 
-    async findMyActive(jekId: string) {
-        return this.prisma.requests.findMany({
-            where: {
-                assigned_jek_id: jekId,
-                status: 'IN_PROGRESS',
-            },
-            select: {
-                id: true,
-                createdAt: true,
-                address: true,
-                requestPhotos: true,
-                description: true,
-                status: true,
-                request_number: true
-            },
-        });
+    async findMyActive(jekId: string, page: number = 1, limit: number = 10) {
+        const skip = (page - 1) * limit;
+
+        const [requests, total] = await Promise.all([
+            this.prisma.requests.findMany({
+                where: {
+                    assigned_jek_id: jekId,
+                    status: 'IN_PROGRESS',
+                },
+                include: {
+                    address: true,
+                    requestPhotos: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            } as any),
+            this.prisma.requests.count({
+                where: {
+                    assigned_jek_id: jekId,
+                    status: 'IN_PROGRESS',
+                },
+            } as any),
+        ]);
+
+        return {
+            data: requests,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        };
     }
 
     async assign(requestId: string, jekId: string) {
@@ -132,7 +195,7 @@ export class RequestsService {
             where: { id: requestId },
             data: {
                 status: 'JEK_COMPLETED' as Status_Flow,
-                note: note, // <--- Izohni saqlash
+                note: note,
                 completedAt: new Date(),
             },
         });

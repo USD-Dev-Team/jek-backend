@@ -9,6 +9,7 @@ import { RequestsModule } from './modules/requests/requests.module';
 import { BotModule } from './modules/bot/bot.module';
 import { MediaModule } from './modules/media/media.module';
 import { RequestPhotosModule } from './modules/request-photos/request-photos.module';
+import { AddressesModule } from './modules/addresses/addresses.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RequestPhotosModule } from './modules/request-photos/request-photos.mod
     RequestsModule,
     MediaModule,
     RequestPhotosModule,
+    AddressesModule,
     BotModule,
   ],
   controllers: [],

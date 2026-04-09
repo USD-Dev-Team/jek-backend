@@ -5,20 +5,19 @@ import {
   MinLength,
   Matches,
 } from 'class-validator';
-import { District } from '@prisma/client';
 import { ApiProperty } from '@nestjs/swagger';
 export class RegisterDto {
-  @ApiProperty()
+  @ApiProperty({ example: "Alisher" })
   @IsNotEmpty({ message: 'Isminggizni kiriting' })
   @IsString()
   first_name: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: "Valiyev" })
   @IsNotEmpty({ message: 'Isminggizni kiriting' })
   @IsString()
   last_name: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: "+998951111111" })
   @IsNotEmpty({ message: 'Telefon raqami kiritilishi shart' })
   @IsString({ message: "Telefon raqami matn ko'rinishida bo'lishi kerak" })
   @Matches(
@@ -30,14 +29,7 @@ export class RegisterDto {
   )
   phoneNumber: string;
 
-  @ApiProperty()
-  @IsNotEmpty({ message: 'Hududni tanlash majburiy' })
-  @IsEnum(District, {
-    message: "Sirdaryo viloyatidagi to'g'ri hududni tanlang",
-  })
-  address: District;
-
-  @ApiProperty()
+  @ApiProperty({ example: "a12345678" })
   @IsNotEmpty({ message: 'Parol majburiy' })
   @MinLength(8, { message: "Parol kamida 8 ta belgidan iborat bo'lishi kerak" })
   @Matches(/((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[a-zA-Z]).*$/, {
@@ -45,14 +37,14 @@ export class RegisterDto {
   })
   password: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: "a12345678" })
   @IsNotEmpty({ message: 'Parolni tasdiqlash majburiy' })
   @IsString()
   passwordConfirm: string;
 }
 
 export class LoginDto {
-  @ApiProperty()
+  @ApiProperty({ example: "+998951111111" })
   @IsNotEmpty({ message: 'Telefon raqami kiritilishi shart' })
   @IsString({ message: "Telefon raqami matn ko'rinishida bo'lishi kerak" })
   @Matches(
@@ -64,7 +56,7 @@ export class LoginDto {
   )
   phoneNumber: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: "a12345678" })
   @IsString()
   @MinLength(6, { message: "Parol kamida 6 ta belgidan iborat bo'lishi kerak" })
   @IsNotEmpty({ message: 'Parol kiritilishi shart' })
