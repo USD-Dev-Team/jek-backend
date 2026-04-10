@@ -19,8 +19,8 @@ export class AuthController {
 
       return {
         message: result.message,
-        userId:result.userId,
-        role:result.role,
+        userId: result.userId,
+        role: result.role,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };
@@ -42,11 +42,25 @@ export class AuthController {
 
       return {
         message: result.message,
-        userId:result.userId,
-        role:result.role,
+        userId: result.userId,
+        role: result.role,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Refresh token orqali tokenni yangilash',
+    description: 'Refresh token yuboriladi va yangi access hamda refresh token olinadi.',
+  })
+  @Post('jek/refresh')
+  async refresh(@Body('refreshToken') refreshToken: string) {
+    try {
+      return await this.authService.refreshTokens(refreshToken);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Serverda xatolik yuz berdi');

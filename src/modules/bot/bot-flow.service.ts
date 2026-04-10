@@ -141,7 +141,7 @@ export class BotFlowService {
                 return;
 
             case 'REQ_CONFIRM':
-                if (text === '✅ Tasdiqlash / Подetermit' || text === '✅ Tayyor / Готово' || text === '✅ Tasdiqlash') {
+                if (text === '✅ Tasdiqlash / Подтвердить' || text === '✅ Tayyor / Готово' || text === '✅ Tasdiqlash') {
                     await this.botService.createRequestFromTemp(userId);
                     await ctx.reply('Arizangiz muvaffaqiyatli yuborildi! JEK xodimlari tez orada ko\'rib chiqishadi. / Ваша заявка успешно отправлена! Сотрудники ЖЭК рассмотрят ее в ближайшее время.', this.mainMenu());
                     return;
