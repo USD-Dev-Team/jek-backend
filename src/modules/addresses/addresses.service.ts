@@ -24,7 +24,8 @@ export class AddressesService {
         }
     }
 
-    async validateAndGetAddress (data: AssignAddressDto) {
+    async validateAndGetAddress(data: { district: string; neighborhood: string; building_number?: string; apartment_number?: string }, tx?: any) {
+        const client = tx || this.prisma;
         // 0. Hudud va mahalla mavjudligini JSON bo'yicha tekshirish
         const districts = this.mahallaData.addresses;
         if (!districts.includes(data.district)) {
@@ -36,35 +37,36 @@ export class AddressesService {
             throw new BadRequestException(`Xato: '${data.neighborhood}' mahallasi '${data.district}' tarkibida mavjud emas`);
         }
 
-        let address = await this.prisma.addresses.findFirst({
+        let address = await client.addresses.findFirst({
             where: {
                 district: data.district,
                 neighborhood: data.neighborhood,
-                street: data.street || null,
-                house: data.house || null,
+                building_number: data.building_number || null,
+                apartment_number: data.apartment_number || null,
             },
         });
 
         if (!address) {
-            address = await this.prisma.addresses.create({
+            address = await client.addresses.create({
                 data: {
                     district: data.district,
                     neighborhood: data.neighborhood,
-                    street: data.street || null,
-                    house: data.house || null,
+                    building_number: data.building_number || null,
+                    apartment_number: data.apartment_number || null,
                 },
             });
         }
         return address;
     }
 
-    async assignToAdmin(adminId: string, data: AssignAddressDto) {
-        const existJek = await this.prisma.admins.findUnique({ where: { id: adminId } });
+    async assignToAdmin(adminId: string, data: AssignAddressDto, tx?: any) {
+        const client = tx || this.prisma;
+        const existJek = await client.admins.findUnique({ where: { id: adminId } });
         if (!existJek) throw new NotFoundException('Employee not found');
 
-        const address = await this.validateAndGetAddress (data);
+        const address = await this.validateAndGetAddress(data, tx);
 
-        const exists = await this.prisma.admin_addresses.findFirst({
+        const exists = await client.admin_addresses.findFirst({
             where: {
                 admin_id: adminId,
                 address_id: address.id,
@@ -73,7 +75,7 @@ export class AddressesService {
 
         if (exists) throw new BadRequestException('Ushbu mahalla allaqachon biriktirilgan');
 
-        await this.prisma.admin_addresses.create({
+        await client.admin_addresses.create({
             data: {
                 admin_id: adminId,
                 address_id: address.id,
@@ -112,14 +114,14 @@ export class AddressesService {
     //     });
     // }
 
-async findMyAddresses(jek_id: string) {
-    return this.prisma.admin_addresses.findMany({
-        where: {
-            admin_id: jek_id,
-        },
-        select:{
-            address:true,
-        }
-    });
-}
+    async findMyAddresses(jek_id: string) {
+        return this.prisma.admin_addresses.findMany({
+            where: {
+                admin_id: jek_id,
+            },
+            select: {
+                address: true,
+            }
+        });
+    }
 }

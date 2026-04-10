@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { AddressesService } from '../addresses/addresses.service';
 
 @Injectable()
 export class AuthService {
@@ -16,66 +17,75 @@ export class AuthService {
         private readonly prisma: PrismaService,
         private readonly jwt: JwtService,
         private readonly configService: ConfigService,
+        private readonly addressesService: AddressesService,
     ) { }
 
     async registerJek(registerDto: RegisterDto) {
         const cleanPhone = registerDto.phoneNumber.replace(/\D/g, '');
-
-        const finalPhone =
-            cleanPhone.length === 9 ? `998${cleanPhone}` : cleanPhone;
+        const finalPhone = cleanPhone.length === 9 ? `998${cleanPhone}` : cleanPhone;
 
         const existJek = await this.prisma.admins.findUnique({
             where: { phoneNumber: finalPhone },
-            select: { id: true, password: true, phoneNumber: true, isActive: true, role: true } as any
+            select: { id: true } as any
         });
 
         if (existJek) {
             throw new ConflictException('Phone number already added');
         }
 
-        const { password, passwordConfirm, phoneNumber, ...data } = registerDto;
-
-        if (password !== passwordConfirm) {
+        if (registerDto.password !== registerDto.passwordConfirm) {
             throw new BadRequestException('Password error');
         }
-        const hashPassword = await bcrypt.hash(password, 12);
+
+        const hashPassword = await bcrypt.hash(registerDto.password, 12);
         const jti = crypto.randomUUID();
 
-        const newJek: any = await this.prisma.admins.create({
-            data: {
-                first_name: registerDto.first_name,
-                last_name: registerDto.last_name,
-                password: hashPassword,
-                phoneNumber: finalPhone,
-                jti,
-                isActive: false, // Ro'yxatdan o'tganda nofaol bo'ladi
-            } as any,
-            select: { phoneNumber: true, id: true, role: true, jti: true, first_name: true, last_name: true } as any,
+        // Tranzaksiya boshlanishi
+        return await this.prisma.$transaction(async (tx) => {
+            const newJek: any = await tx.admins.create({
+                data: {
+                    first_name: registerDto.first_name,
+                    last_name: registerDto.last_name,
+                    password: hashPassword,
+                    phoneNumber: finalPhone,
+                    jti,
+                    isActive: true,
+                } as any,
+                select: { phoneNumber: true, id: true, role: true, jti: true } as any,
+            });
+
+            // Ro'yxatdan o'tayotganda yuborilgan manzillarni biriktirish
+            if (registerDto.addresses && registerDto.addresses.length > 0) {
+                for (const addr of registerDto.addresses) {
+                    // Agar bitta addr xato bo'lsa, xato otiladi va tranzaksiya rollback bo'ladi
+                    await this.addressesService.assignToAdmin(newJek.id, addr, tx);
+                }
+            }
+
+            const payload = {
+                id: newJek.id,
+                role: newJek.role,
+                phoneNumber: newJek.phoneNumber,
+            };
+
+            const accessToken = await this.jwt.signAsync(payload, {
+                secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+                expiresIn: '1h',
+            });
+
+            const refreshToken = await this.jwt.signAsync(payload, {
+                secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+                expiresIn: '7d',
+            });
+
+            return {
+                message: 'Muvofaqiyatli ro\'yxatdan o\'tdingiz',
+                userId: newJek.id,
+                role: newJek.role,
+                refreshToken,
+                accessToken,
+            };
         });
-
-        const payload = {
-            id: newJek.id,
-            role: newJek.role,
-            phoneNumber: newJek.phoneNumber,
-        };
-
-        const accessToken = await this.jwt.signAsync(payload, {
-            secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-            expiresIn: '1h',
-        });
-
-        const refreshToken = await this.jwt.signAsync(payload, {
-            secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-            expiresIn: '7d',
-        });
-
-        return {
-            message: 'Muvofaqiyatli ro\'yxatdan o\'tdingiz',
-            userId: newJek.id,
-            role: newJek.role,
-            refreshToken,
-            accessToken,
-        };
     }
 
     async login(loginDto: LoginDto) {

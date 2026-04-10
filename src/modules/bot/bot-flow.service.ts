@@ -25,7 +25,7 @@ export class BotFlowService {
     }
 
     /**
-     * Foydalanuvchini ro'yxatdan o'tkazish (FIRST_NAME, LAST_NAME, PHONE_NUMBER)
+     * Foydalanuvchini ro'yxatdan o'tkazish (FULL_NAME, PHONE_NUMBER)
      */
     async handleRegistration(ctx: Context, user: any, message: any) {
         const text = message.text;
@@ -34,25 +34,15 @@ export class BotFlowService {
 
         this.logger.log(`User ${userId} registration step: ${currentStep}, text: ${text}`);
 
-        if (currentStep === 'FIRST_NAME') {
+        if (currentStep === 'FULL_NAME' || currentStep === 'FIRST_NAME') {
             if (!text) {
-                await ctx.reply('Iltimos, ismingizni matn ko\'rinishida yuboring.');
+                await ctx.reply('Iltimos, ism-sharifingizni matn ko\'rinishida yuboring. / Пожалуйста, введите ваше ФИО.');
                 return;
             }
-            await this.botService.updateUserData(userId, { first_name: text, registration_step: 'LAST_NAME' });
-            await ctx.reply('Rahmat! Endi familiyangizni kiriting:');
-            return;
-        }
-
-        if (currentStep === 'LAST_NAME') {
-            if (!text) {
-                await ctx.reply('Iltimos, familiyangizni matn ko\'rinishida yuboring.');
-                return;
-            }
-            await this.botService.updateUserData(userId, { last_name: text, registration_step: 'PHONE_NUMBER' });
-            await ctx.reply('Oxirgi bosqich: telefon raqamingizni yuboring:', Markup.keyboard([
-                [Markup.button.contactRequest('📞 Kontakni yuborish')],
-                ['❌ Bekor qilish']
+            await this.botService.updateUserData(userId, { full_name: text, registration_step: 'PHONE_NUMBER' });
+            await ctx.reply('Rahmat! Endi telefon raqamingizni yuboring: / Спасибо! Теперь отправьте ваш номер телефона:', Markup.keyboard([
+                [Markup.button.contactRequest('📞 Kontakni yuborish / Отправить контакт')],
+                ['❌ Bekor qilish / Отмена']
             ]).oneTime().resize());
             return;
         }
@@ -60,11 +50,11 @@ export class BotFlowService {
         if (currentStep === 'PHONE_NUMBER') {
             let phone = message.contact ? message.contact.phone_number : (text && /^(?:\+?998)?\d{9}$/.test(text.replace(/\s/g, '')) ? text.replace(/\s/g, '') : null);
             if (!phone) {
-                await ctx.reply('Iltimos, telefon raqamingizni yuboring yoki "📞 Kontakni yuborish" tugmasini bosing.');
+                await ctx.reply('Iltimos, telefon raqamingizni yuboring yoki "📞 Kontakni yuborish" tugmasini bosing. / Пожалуйста, отправьте номер телефона или нажмите кнопку "Отправить контакт".');
                 return;
             }
             await this.botService.updateUserData(userId, { phoneNumber: phone, registration_step: 'COMPLETED' });
-            await ctx.reply('Muvaffaqiyatli ro\'yxatdan o\'tdingiz! ✅', this.mainMenu());
+            await ctx.reply('Muvaffaqiyatli ro\'yxatdan o\'tdingiz! ✅ / Вы успешно зарегистрировались! ✅', this.mainMenu());
             return;
         }
     }
@@ -78,56 +68,56 @@ export class BotFlowService {
 
         switch (user.registration_step) {
             case 'REQ_DISTRICT':
-                await ctx.reply('Iltimos, tepadagi tugmalardan hududni tanlang:', this.districtMenu());
+                await ctx.reply('Iltimos, tepadagi tugmalardan hududni tanlang: / Пожалуйста, выберите район из кнопок выше:', this.districtMenu());
                 return;
 
             case 'REQ_MAHALLA':
-                if (text === '❌ Bekor qilish') return;
+                if (text === '❌ Bekor qilish / Отмена') return;
                 const userData: any = await this.botService.findOrCreateUser(userId);
-                await ctx.reply('Iltimos, yuqoridagi tugmalardan mahallani tanlang:', this.mahallaMenu(userData.temp_district));
+                await ctx.reply('Iltimos, yuqoridagi tugmalardan mahallani tanlang: / Пожалуйста, выберите махаллю из кнопок выше:', this.mahallaMenu(userData.temp_district));
                 return;
 
-            case 'REQ_STREET':
-                if (text === '❌ Bekor qilish') return;
+            case 'REQ_BUILDING':
+                if (text === '❌ Bekor qilish / Отмена') return;
                 if (!text) {
-                    await ctx.reply('Iltimos, ko\'cha nomini kiriting:');
+                    await ctx.reply('Iltimos, bino raqamini kiriting: / Пожалуйста, введите номер дома:');
                     return;
                 }
-                await this.botService.updateUserData(userId, { temp_street: text, registration_step: 'REQ_HOUSE' });
-                await ctx.reply('Uy raqami / Xonadon raqamini kiriting:');
+                await this.botService.updateUserData(userId, { temp_building_number: text, registration_step: 'REQ_APARTMENT' });
+                await ctx.reply('Xonadon raqamini kiriting: / Введите номер квартиры:');
                 return;
 
-            case 'REQ_HOUSE':
-                if (text === '❌ Bekor qilish') return;
+            case 'REQ_APARTMENT':
+                if (text === '❌ Bekor qilish / Отмена') return;
                 if (!text) {
-                    await ctx.reply('Iltimos, uy raqamini kiriting:');
+                    await ctx.reply('Iltimos, xonadon raqamini kiriting: / Пожалуйста, введите номер квартиры:');
                     return;
                 }
-                const fullAddress = `${user.temp_mahalla} m., ${user.temp_street} ko'chasi, ${text}-uy`;
-                await this.botService.updateUserData(userId, { temp_house: text, temp_address: fullAddress, registration_step: 'REQ_DESCRIPTION' });
-                await ctx.reply('Muammoni qisqacha tavsiflab bering (matn ko\'rinishida):');
+                const fullAddress = `${user.temp_mahalla} m., ${user.temp_building_number}-bino / дом, ${text}-xonadon / кв`;
+                await this.botService.updateUserData(userId, { temp_apartment_number: text, temp_address: fullAddress, registration_step: 'REQ_DESCRIPTION' });
+                await ctx.reply('Muammoni qisqacha tavsiflab bering (matn ko\'rinishida): / Кратко опишите проблему (текстом):');
                 return;
 
             case 'REQ_DESCRIPTION':
-                if (text === '❌ Bekor qilish') return;
+                if (text === '❌ Bekor qilish / Отмена') return;
                 if (!text) {
-                    await ctx.reply('Iltimos, muammo tavsifini yozib yuboring.');
+                    await ctx.reply('Iltimos, muammo tavsifini yozib yuboring. / Пожалуйста, отправьте описание проблемы.');
                     return;
                 }
                 await this.botService.updateUserData(userId, { temp_description: text, registration_step: 'REQ_PHOTO' });
-                await ctx.reply('Muammoni tasdiqlovchi rasm(lar) yuboring:', Markup.keyboard([['📸 Rasmsiz davom etish'], ['❌ Bekor qilish']]).oneTime().resize());
+                await ctx.reply('Muammoni tasdiqlovchi rasm(lar) yuboring: / Отправьте фото, подтверждающие проблему:', Markup.keyboard([['📸 Rasmsiz davom etish / Продолжить без фото'], ['❌ Bekor qilish / Отмена']]).oneTime().resize());
                 return;
 
             case 'REQ_PHOTO':
-                if (text === '📸 Rasmsiz davom etish') {
+                if (text === '📸 Rasmsiz davom etish / Продолжить tanpa foto' || text.includes('Rasmsiz davom etish')) {
                     await this.botService.updateUserData(userId, { registration_step: 'REQ_CONFIRM' });
                     await this.showConfirmationSummary(ctx);
                     return;
                 }
 
-                if (text === '✅ Tayyor') {
+                if (text === '✅ Tayyor / Готово') {
                     if (!user.temp_photos || (user.temp_photos as any[]).length === 0) {
-                        await ctx.reply('Iltimos, kamida bitta rasm yuboring yoki "📸 Rasmsiz davom etish" tugmasini bosing.');
+                        await ctx.reply('Iltimos, kamida bitta rasm yuboring yoki "📸 Rasmsiz davom etish" tugmasini bosing. / Пожалуйста, отправьте хотя бы одно фото или нажмите кнопку "Продолжить без фото".');
                         return;
                     }
                     await this.botService.updateUserData(userId, { registration_step: 'REQ_CONFIRM' });
@@ -141,27 +131,27 @@ export class BotFlowService {
                     await this.botService.addTempPhoto(userId, fileId);
 
                     if (!message.media_group_id || (user.temp_photos as any[] || []).length % 5 === 0) {
-                        await ctx.reply(`📸 Rasm qo'shildi. Yana rasm yuboring yoki quyidagilardan birini tanlang:`, Markup.keyboard([['✅ Tayyor'], ['❌ Bekor qilish']]).oneTime().resize());
+                        await ctx.reply(`📸 Rasm qo'shildi. Yana rasm yuboring yoki quyidagilardan birini tanlang: / Фото добавлено. Отправьте еще фото или выберите один из вариантов:`, Markup.keyboard([['✅ Tayyor / Готово'], ['❌ Bekor qilish / Отмена']]).oneTime().resize());
                     }
                     return;
                 }
-                if (text !== '❌ Bekor qilish') {
-                    await ctx.reply('Iltimos, rasm yuboring yoki "✅ Tayyor" tugmasini bosing.');
+                if (text !== '❌ Bekor qilish / Отмена') {
+                    await ctx.reply('Iltimos, rasm yuboring yoki "✅ Tayyor" tugmasini bosing. / Пожалуйста, отправьте фото или нажмите кнопку "Готово".');
                 }
                 return;
 
             case 'REQ_CONFIRM':
-                if (text === '✅ Tasdiqlash' || text === '✅ Tayyor') {
+                if (text === '✅ Tasdiqlash / Подetermit' || text === '✅ Tayyor / Готово' || text === '✅ Tasdiqlash') {
                     await this.botService.createRequestFromTemp(userId);
-                    await ctx.reply('Arizangiz muvaffaqiyatli yuborildi! JEK xodimlari tez orada ko\'rib chiqishadi.', this.mainMenu());
+                    await ctx.reply('Arizangiz muvaffaqiyatli yuborildi! JEK xodimlari tez orada ko\'rib chiqishadi. / Ваша заявка успешно отправлена! Сотрудники ЖЭК рассмотрят ее в ближайшее время.', this.mainMenu());
                     return;
-                } else if (text === '❌ Bekor qilish') {
+                } else if (text === '❌ Bekor qilish / Отмена' || text === '❌ Bekor qilish') {
                     await this.botService.updateUserData(userId, {
                         registration_step: 'COMPLETED',
-                        temp_district: null, temp_mahalla: null, temp_street: null,
-                        temp_house: null, temp_address: null, temp_description: null, temp_photos: null
+                        temp_district: null, temp_mahalla: null, temp_building_number: null,
+                        temp_apartment_number: null, temp_address: null, temp_description: null, temp_photos: null
                     });
-                    await ctx.reply('Jarayon bekor qilindi.', this.mainMenu());
+                    await ctx.reply('Jarayon bekor qildi. / Процесс отменен.', this.mainMenu());
                     return;
                 }
                 return;
@@ -171,17 +161,17 @@ export class BotFlowService {
     async showConfirmationSummary(ctx: Context) {
         const latestUser: any = await this.botService.findOrCreateUser(ctx.from!.id);
         const photoCount = Array.isArray(latestUser.temp_photos) ? latestUser.temp_photos.length : 0;
-        const summary = `📄 <b>Murojaatni tasdiqlaysizmi?</b>\n\n📍 Hudud: ${latestUser.temp_district?.replace('_', ' ')}\n🏠 Manzil: ${latestUser.temp_address}\n📝 Muammo: ${latestUser.temp_description}\n📸 Rasmlar soni: ${photoCount} ta`;
+        const summary = `📄 <b>Murojaatni tasdiqlaysizmi? / Подтверждаете ли вы обращение?</b>\n\n📍 Hudud / Район: ${latestUser.temp_district}\n🏠 Manzil / Адрес: ${latestUser.temp_address}\n📝 Muammo / Проблема: ${latestUser.temp_description}\n📸 Rasmlar soni / Кол-во фото: ${photoCount} ta / шт`;
         await ctx.reply(summary, {
             parse_mode: 'HTML',
-            ...Markup.keyboard([['✅ Tasdiqlash', '❌ Bekor qilish']]).oneTime().resize()
+            ...Markup.keyboard([['✅ Tasdiqlash / Подтвердить', '❌ Bekor qilish / Отмена']]).oneTime().resize()
         });
     }
 
     mainMenu() {
         return Markup.keyboard([
-            ['✍️ Ariza yaratish', '📋 Mening arizalarim'],
-            ['👤 Profilim', 'ℹ️ Ma\'lumot']
+            ['✍️ Ariza yaratish / Создать заявку'],
+            ['📋 Mening arizalarim / Мои заявки']
         ]).resize();
     }
 
@@ -193,7 +183,6 @@ export class BotFlowService {
 
     mahallaMenu(districtName: string) {
         const mahallas = this.mahallaData.mahallas[districtName] || [];
-        // Callback data limit is 64 bytes. Mahalla names are usually short enough.
         const buttons = mahallas.map((m: string) => Markup.button.callback(m, `mhl_${m}`));
         return Markup.inlineKeyboard(buttons, { columns: 2 });
     }

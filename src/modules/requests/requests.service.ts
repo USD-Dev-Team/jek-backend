@@ -15,7 +15,7 @@ export class RequestsService {
     ) { }
 
     async create(createRequestDto: CreateRequestDto) {
-        const { telegram_id, address, latitude, longitude, description, district, mahalla, street, house } = createRequestDto;
+        const { telegram_id, address, latitude, longitude, description, district, mahalla, building_number, apartment_number } = createRequestDto;
 
         const user = await this.prisma.users.findFirst({
             where: { telegram_id: BigInt(telegram_id) },
@@ -28,8 +28,8 @@ export class RequestsService {
         const addr = await this.addressesService.validateAndGetAddress({
             district,
             neighborhood: mahalla,
-            street,
-            house
+            building_number,
+            apartment_number
         });
 
         const requestNumber = await this.generateRequestNumber();
@@ -104,8 +104,8 @@ export class RequestsService {
                         select: {
                             district: true,
                             neighborhood: true,
-                            street: true,
-                            house: true,
+                            building_number: true,
+                            apartment_number: true,
                         }
                     },
                     requestPhotos: {
@@ -116,8 +116,7 @@ export class RequestsService {
                     },
                     user: {
                         select: {
-                            first_name: true,
-                            last_name: true,
+                            full_name: true,
                             phoneNumber: true
                         }
                     }

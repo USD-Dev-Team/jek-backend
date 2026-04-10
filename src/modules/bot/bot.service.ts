@@ -97,7 +97,7 @@ export class BotService {
             user = await this.prisma.users.create({
                 data: {
                     telegram_id: BigInt(telegramId),
-                    registration_step: 'FIRST_NAME',
+                    registration_step: 'FULL_NAME',
                 } as any,
             });
         }
@@ -105,7 +105,7 @@ export class BotService {
         if (!user.registration_step) {
             user = await this.prisma.users.update({
                 where: { id: user.id },
-                data: { registration_step: 'FIRST_NAME' } as any
+                data: { registration_step: 'FULL_NAME' } as any
             });
         }
 
@@ -196,11 +196,11 @@ export class BotService {
             throw new Error('Incomplete data for request');
         }
 
-        const addr = await this.addressesService.validateAndGetAddress ({
+        const addr = await this.addressesService.validateAndGetAddress({
             district: user.temp_district,
             neighborhood: user.temp_mahalla,
-            street: user.temp_street,
-            house: user.temp_house
+            building_number: user.temp_building_number,
+            apartment_number: user.temp_apartment_number
         });
 
         const requestNumber = await this.generateRequestNumber();
@@ -241,8 +241,8 @@ export class BotService {
                 registration_step: 'COMPLETED',
                 temp_district: null,
                 temp_mahalla: null,
-                temp_street: null,
-                temp_house: null,
+                temp_building_number: null,
+                temp_apartment_number: null,
                 temp_address: null,
                 temp_description: null,
                 temp_photos: null,

@@ -35,15 +35,15 @@ export class CreateRequestDto {
     @IsString()
     mahalla: string;
 
-    @ApiProperty({ example: 'Paxtakor', required: false })
+    @ApiProperty({ example: '15-bino', required: false })
     @IsOptional()
     @IsString()
-    street?: string;
+    building_number?: string;
 
-    @ApiProperty({ example: '15', required: false })
+    @ApiProperty({ example: '45-xonadon', required: false })
     @IsOptional()
     @IsString()
-    house?: string;
+    apartment_number?: string;
 
     @ApiProperty({
         example: 41.311081,

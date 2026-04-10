@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AssignAddressDto {
@@ -11,14 +11,4 @@ export class AssignAddressDto {
     @IsNotEmpty()
     @IsString()
     neighborhood: string;
-
-    @ApiProperty({ example: 'Yoshlar ko\'chasi', required: false })
-    @IsOptional()
-    @IsString()
-    street?: string;
-
-    @ApiProperty({ example: '12', required: false })
-    @IsOptional()
-    @IsString()
-    house?: string;
 }

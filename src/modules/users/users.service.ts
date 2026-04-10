@@ -7,7 +7,7 @@ export class UsersService {
     constructor(private readonly prisma: PrismaService) { }
 
     async create(createUserDto: CreateUserDto) {
-        const { telegram_id, phoneNumber, first_name, last_name } = createUserDto;
+        const { telegram_id, phoneNumber, full_name } = createUserDto;
 
         // Telefon raqamini tozalash (agar kerak bo'lsa)
         const cleanPhone = phoneNumber.replace(/\D/g, '');
@@ -27,8 +27,7 @@ export class UsersService {
             data: {
                 telegram_id: BigInt(telegram_id),
                 phoneNumber: finalPhone,
-                first_name,
-                last_name,
+                full_name,
             },
         });
 
@@ -38,8 +37,7 @@ export class UsersService {
             data: {
                 id: newUser.id,
                 telegram_id: newUser.telegram_id.toString(),
-                first_name: newUser.first_name,
-                last_name: newUser.last_name,
+                full_name: newUser.full_name,
                 phoneNumber: newUser.phoneNumber,
                 role: newUser.role,
             },
