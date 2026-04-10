@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'Admin');
+CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'Admin', 'INSPECTION', 'Government');
 
 -- CreateEnum
 CREATE TYPE "Status_Flow" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'JEK_COMPLETED', 'REJECTED', 'JEK_REJECTED');
@@ -8,15 +8,14 @@ CREATE TYPE "Status_Flow" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'JEK_C
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
     "telegram_id" BIGINT NOT NULL,
-    "first_name" TEXT,
-    "last_name" TEXT,
+    "full_name" TEXT,
     "phoneNumber" TEXT,
     "role" "jekRoles" NOT NULL DEFAULT 'User',
     "registration_step" TEXT DEFAULT 'START',
     "temp_district" TEXT,
     "temp_mahalla" TEXT,
-    "temp_street" TEXT,
-    "temp_house" TEXT,
+    "temp_building_number" TEXT,
+    "temp_apartment_number" TEXT,
     "temp_address" TEXT,
     "temp_description" TEXT,
     "temp_photos" JSONB,
@@ -95,8 +94,8 @@ CREATE TABLE "addresses" (
     "id" TEXT NOT NULL,
     "district" TEXT NOT NULL,
     "neighborhood" TEXT NOT NULL,
-    "street" TEXT,
-    "house" TEXT,
+    "building_number" TEXT,
+    "apartment_number" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -127,7 +126,7 @@ CREATE UNIQUE INDEX "admins_phoneNumber_key" ON "admins"("phoneNumber");
 CREATE UNIQUE INDEX "requests_request_number_key" ON "requests"("request_number");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "addresses_district_neighborhood_street_house_key" ON "addresses"("district", "neighborhood", "street", "house");
+CREATE UNIQUE INDEX "addresses_district_neighborhood_building_number_apartment_n_key" ON "addresses"("district", "neighborhood", "building_number", "apartment_number");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "admin_addresses_admin_id_address_id_key" ON "admin_addresses"("admin_id", "address_id");

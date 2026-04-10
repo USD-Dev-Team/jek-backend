@@ -25,22 +25,22 @@ enum Status_Flow {
   JEK_REJECTED
 }
 
+
 //  Users modeli
 
 model Users {
   id                String   @id @default(uuid())
   telegram_id       BigInt   @unique
-  first_name        String?
-  last_name         String?
+  full_name         String?
   phoneNumber       String?  @unique
   role              jekRoles @default(User)
-  registration_step String?  @default("START") // START, FIRST_NAME, LAST_NAME, PHONE_NUMBER, COMPLETED, REQ_DISTRICT, REQ_ADDRESS, REQ_DESCRIPTION, REQ_PHOTO, REQ_CONFIRM
+  registration_step String?  @default("START") // START, FULL_NAME, PHONE_NUMBER, COMPLETED, REQ_DISTRICT, REQ_ADDRESS, REQ_DESCRIPTION, REQ_PHOTO, REQ_CONFIRM
 
   // Vaqtinchalik ariza ma'lumotlari
   temp_district          String?
   temp_mahalla           String?
-  temp_street            String?
-  temp_house             String?
+  temp_building_number   String?
+  temp_apartment_number  String?
   temp_address           String?
   temp_description       String?
   temp_photos            Json? // Bir nechta rasmlar uchun file_id massivi
@@ -140,11 +140,11 @@ model RequestStatusLog {
 // street va house qaysi biri bo'lmasa null bo'ladi
 
 model Addresses {
-  id           String   @id @default(uuid())
-  district     String   // Tuman (endi String ko'rinishida)
-  neighborhood String   // (Dahasi) Mahalla
-  street       String?  // Ko'cha
-  house        String?  // Uy raqami
+  id               String   @id @default(uuid())
+  district         String   // Tuman (endi String ko'rinishida)
+  neighborhood     String   // (Dahasi) Mahalla
+  building_number  String?  // Bino raqami
+  apartment_number String?  // Xonadon raqami
 
   admin_addresses Admin_addresses[]
   requests        Requests[] // Arizalar ro'yxati (bog'landi)
@@ -152,7 +152,7 @@ model Addresses {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([district, neighborhood, street, house]) // Manzillar takrorlanmasligi uchun
+  @@unique([district, neighborhood, building_number, apartment_number]) // Manzillar takrorlanmasligi uchun
   @@map("addresses")
 }
 

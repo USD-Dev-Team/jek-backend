@@ -24,7 +24,7 @@ export class AddressesService {
         }
     }
 
-    async validateAndGetAddress(data: { district: string; neighborhood: string; street?: string; house?: string }, tx?: any) {
+    async validateAndGetAddress(data: { district: string; neighborhood: string; building_number?: string; apartment_number?: string }, tx?: any) {
         const client = tx || this.prisma;
         // 0. Hudud va mahalla mavjudligini JSON bo'yicha tekshirish
         const districts = this.mahallaData.addresses;
@@ -41,8 +41,8 @@ export class AddressesService {
             where: {
                 district: data.district,
                 neighborhood: data.neighborhood,
-                street: data.street || null,
-                house: data.house || null,
+                building_number: data.building_number || null,
+                apartment_number: data.apartment_number || null,
             },
         });
 
@@ -51,8 +51,8 @@ export class AddressesService {
                 data: {
                     district: data.district,
                     neighborhood: data.neighborhood,
-                    street: data.street || null,
-                    house: data.house || null,
+                    building_number: data.building_number || null,
+                    apartment_number: data.apartment_number || null,
                 },
             });
         }

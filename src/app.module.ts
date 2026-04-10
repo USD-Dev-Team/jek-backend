@@ -10,6 +10,7 @@ import { BotModule } from './modules/bot/bot.module';
 import { MediaModule } from './modules/media/media.module';
 import { RequestPhotosModule } from './modules/request-photos/request-photos.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
+import { StatisticsModule } from './modules/statistics/statistics.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AddressesModule } from './modules/addresses/addresses.module';
     RequestPhotosModule,
     AddressesModule,
     BotModule,
+    StatisticsModule,
   ],
   controllers: [],
   providers: [],

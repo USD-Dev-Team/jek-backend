@@ -19,20 +19,12 @@ export class CreateUserDto {
   telegram_id: string;
 
   @ApiProperty({
-    example: 'John',
-    description: 'Ism',
+    example: 'John Doe',
+    description: 'Ism-sharif',
   })
-  @IsNotEmpty({ message: 'Ism kiritilishi shart' })
+  @IsNotEmpty({ message: 'Ism-sharif kiritilishi shart' })
   @IsString()
-  first_name: string;
-
-  @ApiProperty({
-    example: 'Doe',
-    description: 'Familiya',
-  })
-  @IsNotEmpty({ message: 'Familiya kiritilishi shart' })
-  @IsString()
-  last_name: string;
+  full_name: string;
 
   @ApiProperty({
     example: '+998901234567',
