@@ -7,6 +7,8 @@ import {
   Req,
   ParseUUIDPipe,
   UseGuards,
+  Post,
+  Delete,
   InternalServerErrorException,
   HttpException,
   Query,
@@ -17,7 +19,7 @@ import {
   UpdateAdminDto,
   updateStatusDto,
 } from './dto/update-admin.dto';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiParam, ApiTags } from '@nestjs/swagger';
 import { TokenGuard } from 'src/common/guards/token.guard';
 import { RoleGuard } from 'src/common/guards/role.guard';
 import { Roles } from 'src/common/decorators/role';
@@ -36,7 +38,7 @@ export class AdminsController {
   })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean, description: 'Default: true' })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.INSPECTION)
+  @Roles('INSPECTION')
   @Get('all-list')
   async findAll(@Query('isActive') isActiveQuery: string) {
     try {
@@ -53,7 +55,7 @@ export class AdminsController {
     description: "Tizimga kirgan adminning barcha ma'lumotlarini qaytaradi. Ruxsat: JEK.",
   })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.JEK)
+  @Roles('JEK', 'INSPECTION')
   @AllowInactive()
   @Get('self/data')
   async findSelf(@Req() req: any) {
@@ -69,8 +71,14 @@ export class AdminsController {
     summary: "Xodim holatini o'zgartirish (activ/inactiv)",
     description: "Xodimni tizimda faollashtirish yoki o'chirish. Ruxsat: INSPECTION.",
   })
+  @ApiParam({
+    name: 'id',
+    description: 'Xodim ID (UUID)',
+    required: true,
+    type: String,
+  })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.INSPECTION)
+  @Roles('INSPECTION')
   @Patch('update/status/:id')
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -86,10 +94,10 @@ export class AdminsController {
 
   @ApiOperation({
     summary: "Profil ma'lumotlarini yangilash",
-    description: "Adminning shaxsiy ma'lumotlarini o'zgartirish. Ruxsat: JEK.",
+    description: "Admin o'zining shaxsiy ma'lumotlarini o'zgartirishi. Ruxsat: JEK, INSPECTION.",
   })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.JEK)
+  @Roles('JEK', 'INSPECTION')
   @Patch('update/profile')
   async updateProfile(@Req() req: any, @Body() updateAdminDto: UpdateAdminDto) {
     try {
@@ -102,10 +110,10 @@ export class AdminsController {
 
   @ApiOperation({
     summary: "Parolni o'zgartirish",
-    description: "Adminning joriy parolini yangisiga almashtirish. Ruxsat: JEK.",
+    description: "Hodimning joriy parolini yangisiga almashtirish. Ruxsat: JEK, INSPECTION.",
   })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.JEK)
+  @Roles('JEK', 'INSPECTION')
   @Patch('change/password')
   async changePassword(
     @Req() req: any,
@@ -113,6 +121,28 @@ export class AdminsController {
   ) {
     try {
       return await this.adminsService.changePassword(req['user'].id, changePassword);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+    }
+  }
+
+  @ApiOperation({
+    summary: "Xodim ma'lumotlarini olish",
+    description: "Xodimning ma'lumotlarini olish. Ruxsat: INSPECTION.",
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Xodim ID (UUID)',
+    required: true,
+    type: String,
+  })
+  @UseGuards(TokenGuard, RoleGuard)
+  @Roles('INSPECTION')
+  @Get('find/:id')
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    try {
+      return await this.adminsService.findOne(id);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Serverda xatolik yuz berdi');

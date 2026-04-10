@@ -20,6 +20,7 @@ export class AuthController {
       return {
         message: result.message,
         userId:result.userId,
+        role:result.role,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };
@@ -42,6 +43,7 @@ export class AuthController {
       return {
         message: result.message,
         userId:result.userId,
+        role:result.role,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };

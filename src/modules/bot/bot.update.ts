@@ -2,7 +2,6 @@ import { Update, Start, On, Action } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { BotService } from './bot.service';
 import { Logger } from '@nestjs/common';
-import { District } from '@prisma/client';
 import { BotFlowService } from './bot-flow.service';
 
 @Update()
@@ -32,18 +31,33 @@ export class BotUpdate {
         }
     }
 
-    @Action(/^district_/)
+    @Action(/^dist_/)
     async onDistrictSelect(ctx: Context) {
         if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
         try {
-            const district = (ctx.callbackQuery as any).data.replace('district_', '') as District;
+            const district = (ctx.callbackQuery as any).data.replace('dist_', '');
             await this.botService.updateUserData(ctx.from.id, { temp_district: district, registration_step: 'REQ_MAHALLA' });
             await ctx.answerCbQuery();
-            await ctx.editMessageText(`Tanlangan hudud: ${district.replace('_', ' ')}`);
-            await ctx.reply('Mahalla nomini kiriting:', Markup.keyboard([['❌ Bekor qilish']]).oneTime().resize());
+            await ctx.editMessageText(`Tanlangan hudud: ${district}\n\nEndi mahalla nomini tanlang:`, this.botFlowService.mahallaMenu(district));
             return;
         } catch (error) {
             this.logger.error('Error in onDistrictSelect:', error);
+            return;
+        }
+    }
+
+    @Action(/^mhl_/)
+    async onMahallaSelect(ctx: Context) {
+        if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+        try {
+            const mahalla = (ctx.callbackQuery as any).data.replace('mhl_', '');
+            await this.botService.updateUserData(ctx.from.id, { temp_mahalla: mahalla, registration_step: 'REQ_STREET' });
+            await ctx.answerCbQuery();
+            await ctx.editMessageText(`Tanlangan mahalla: ${mahalla}`);
+            await ctx.reply('Ko\'cha nomini kiriting:', Markup.keyboard([['❌ Bekor qilish']]).oneTime().resize());
+            return;
+        } catch (error) {
+            this.logger.error('Error in onMahallaSelect:', error);
             return;
         }
     }
@@ -86,7 +100,9 @@ export class BotUpdate {
             }
 
             await ctx.deleteMessage().catch(() => { });
-            let message = `📄 <b>Ariza tafsilotlari:</b> #${req.request_number}\n\n📍 Hudud: ${req.district.replace('_', ' ')}\n🏠 Manzil: ${req.address}\n📝 Muammo: ${req.description}\n⏳ Holat: ${req.status}\n`;
+            const fullAddr = `${req.address.district}, ${req.address.neighborhood} m. ${req.address.street ? ', ' + req.address.street + ' ko\'chasi' : ''}${req.address.house ? ', ' + req.address.house + '-uy' : ''}`;
+
+            let message = `📄 <b>Ariza tafsilotlari:</b> #${req.request_number}\n\n📍 Hudud: ${req.address.district}\n🏠 Manzil: ${fullAddr}\n📝 Muammo: ${req.description}\n⏳ Holat: ${req.status}\n`;
             if (req.note) message += `💬 Izoh: ${req.note}\n`;
             if (req.rejection_reason) message += `⚠️ Rad etish sababi: ${req.rejection_reason}\n`;
             message += `📅 Sana: ${req.createdAt.toLocaleDateString()}\n`;
@@ -267,7 +283,10 @@ export class BotUpdate {
             case 'LAST_NAME': await ctx.reply('Familiyangizni kiriting:'); break;
             case 'PHONE_NUMBER': await ctx.reply('Telefon raqamingizni yuboring:', Markup.keyboard([Markup.button.contactRequest('📞 Kontakni yuborish')]).oneTime().resize()); break;
             case 'REQ_DISTRICT': await ctx.reply('Hududni tanlang:', this.botFlowService.districtMenu()); break;
-            case 'REQ_MAHALLA': await ctx.reply('Mahalla nomini kiriting:', Markup.keyboard([['❌ Bekor qilish']]).oneTime().resize()); break;
+            case 'REQ_MAHALLA':
+                const u: any = await this.botService.findOrCreateUser(ctx.from!.id);
+                await ctx.reply('Mahalla nomini tanlang:', this.botFlowService.mahallaMenu(u.temp_district));
+                break;
             case 'REQ_STREET': await ctx.reply('Ko\'cha nomini kiriting:', Markup.keyboard([['❌ Bekor qilish']]).oneTime().resize()); break;
             case 'REQ_HOUSE': await ctx.reply('Uy raqamini kiriting:', Markup.keyboard([['❌ Bekor qilish']]).oneTime().resize()); break;
             case 'REQ_DESCRIPTION': await ctx.reply('Muammo tavsifini yozing:', Markup.keyboard([['❌ Bekor qilish']]).oneTime().resize()); break;

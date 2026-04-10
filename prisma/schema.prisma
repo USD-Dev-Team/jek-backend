@@ -10,7 +10,9 @@ datasource db {
 enum jekRoles {
   User
   JEK
+  Admin
   INSPECTION
+  Government
 }
 
 // Ariza holatlari
@@ -23,45 +25,30 @@ enum Status_Flow {
   JEK_REJECTED
 }
 
-// Sirdaryo viloyati bo'yicha tuman/shaharlar ro'yxati
-enum District {
-  GULISTON_SHAHAR
-  YANGIYER_SHAHAR
-  SHIRIN_SHAHAR
-  GULISTON_TUMANI
-  BOYOVUT_TUMANI
-  SAYXUNOBOD_TUMANI
-  MIRZAOBOD_TUMANI
-  OQOLTIN_TUMANI
-  SARD_OBA_TUMANI
-  XOVOS_TUMANI
-  SARDOBA_TUMANI
-}
-
 //  Users modeli
 
 model Users {
-  id                String     @id @default(uuid())
-  telegram_id       BigInt     @unique
+  id                String   @id @default(uuid())
+  telegram_id       BigInt   @unique
   first_name        String?
   last_name         String?
-  phoneNumber       String?    @unique
-  registration_step String?    @default("START") // START, FIRST_NAME, LAST_NAME, PHONE_NUMBER, COMPLETED, REQ_DISTRICT, REQ_ADDRESS, REQ_DESCRIPTION, REQ_PHOTO, REQ_CONFIRM
-  
+  phoneNumber       String?  @unique
+  role              jekRoles @default(User)
+  registration_step String?  @default("START") // START, FIRST_NAME, LAST_NAME, PHONE_NUMBER, COMPLETED, REQ_DISTRICT, REQ_ADDRESS, REQ_DESCRIPTION, REQ_PHOTO, REQ_CONFIRM
+
   // Vaqtinchalik ariza ma'lumotlari
-  temp_district     District?
-  temp_mahalla      String?
-  temp_street       String?
-  temp_house        String?
-  temp_address      String?
-  temp_description  String?
-  temp_photos       Json?      // Bir nechta rasmlar uchun file_id massivi
-  temp_reject_request_id String?   // E'tiroz bildirilayotgan ariza ID-si
-  
-  role              jekRoles   @default(User)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-  requests          Requests[]
+  temp_district          String?
+  temp_mahalla           String?
+  temp_street            String?
+  temp_house             String?
+  temp_address           String?
+  temp_description       String?
+  temp_photos            Json? // Bir nechta rasmlar uchun file_id massivi
+  temp_reject_request_id String? // E'tiroz bildirilayotgan ariza ID-si
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  requests  Requests[]
 
   @@map("users")
 }
@@ -69,19 +56,20 @@ model Users {
 // Admin modeli
 
 model Admins {
-  id           String     @id @default(uuid())
-  first_name   String     @db.VarChar(50)
-  last_name    String     @db.VarChar(50)
-  password     String     @db.VarChar(255)
-  phoneNumber  String     @unique @db.VarChar(20)
-  district     District   // Biriktirilgan hudud
-  address      String     @db.VarChar(255)
-  role         jekRoles   @default(JEK)
-  isActive     Boolean    @default(false)
-  refreshToken String?    @db.Text
-  jti          String?    @db.VarChar(255)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id           String   @id @default(uuid())
+  first_name   String   @db.VarChar(50)
+  last_name    String   @db.VarChar(50)
+  password     String   @db.VarChar(255)
+  phoneNumber  String   @unique @db.VarChar(20)
+  role         jekRoles @default(JEK)
+  isActive     Boolean  @default(false)
+  refreshToken String?  @db.Text
+  jti          String?  @db.VarChar(255)
+
+  addresses Admin_addresses[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   assignedRequests Requests[]
 
@@ -94,13 +82,12 @@ model Requests {
   id               String      @id @default(uuid())
   request_number   String      @unique @db.VarChar(20)
   user_id          String
-  address          String      @db.VarChar(255)
+  address_id       String      // Manzil bog'liqligi
   assigned_jek_id  String?
   latitude         Decimal?    @db.Decimal(10, 8)
   longitude        Decimal?    @db.Decimal(11, 8)
   description      String      @db.Text
   status           Status_Flow @default(PENDING)
-  district         District    // Hudud (Enum)
   note             String?     @db.Text
   rejection_reason String?     @db.Text
   completedAt      DateTime?
@@ -108,6 +95,7 @@ model Requests {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  address           Addresses          @relation(fields: [address_id], references: [id])
   assigned_jek      Admins?            @relation(fields: [assigned_jek_id], references: [id])
   user              Users              @relation(fields: [user_id], references: [id])
   requestPhotos     RequestPhoto[]
@@ -146,4 +134,41 @@ model RequestStatusLog {
   createdAt       DateTime    @default(now())
 
   @@map("request_status_logs")
+}
+
+// Manzil modeli (Addresses)
+// street va house qaysi biri bo'lmasa null bo'ladi
+
+model Addresses {
+  id           String   @id @default(uuid())
+  district     String   // Tuman (endi String ko'rinishida)
+  neighborhood String   // (Dahasi) Mahalla
+  street       String?  // Ko'cha
+  house        String?  // Uy raqami
+
+  admin_addresses Admin_addresses[]
+  requests        Requests[] // Arizalar ro'yxati (bog'landi)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([district, neighborhood, street, house]) // Manzillar takrorlanmasligi uchun
+  @@map("addresses")
+}
+
+// Admin va adreslar orasidagi bog'lanish (Many-to-Many)
+
+model Admin_addresses {
+  id         String @id @default(uuid())
+  admin_id   String
+  address_id String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  admin   Admins    @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+  address Addresses @relation(fields: [address_id], references: [id], onDelete: Cascade)
+
+  @@unique([admin_id, address_id]) // Bitta xodimga bitta mahallani ikki marta biriktirmaslik uchun
+  @@map("admin_addresses")
 }
