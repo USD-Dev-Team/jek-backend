@@ -25,7 +25,7 @@ export class RequestsService {
             throw new ConflictException('Foydalanuvchi topilmadi. Avval ro\'yxatdan o\'ting.');
         }
 
-        const addr = await this.addressesService.findOrCreateAddress({
+        const addr = await this.addressesService.validateAndGetAddress({
             district,
             neighborhood: mahalla,
             street,
@@ -53,10 +53,10 @@ export class RequestsService {
         };
     }
 
-    async findPendingForJek(jekId: string, page: number = 1, limit: number = 10) {
+    async findJekRequests(jekId: string, status?: Status_Flow, page: number = 1, limit: number = 10) {
         const skip = (page - 1) * limit;
 
-        // 1. Xodimga biriktirilgan mahallalarni olish
+        // 1. Xodimga biriktirilgan mahallalarni olish (PENDING filteri uchun)
         const admin = await (this.prisma.admins as any).findUnique({
             where: { id: jekId },
             include: {
@@ -65,72 +65,68 @@ export class RequestsService {
                 }
             }
         });
-
         if (!admin) throw new ConflictException('Xodim topilmadi');
-
-        // Barcha biriktirilgan mahalla nomlarini massivga yig'ish
         const neighborhoodNames = admin.addresses.map(a => a.address.neighborhood);
 
+        // 2. Query filtri yaratish
+        let where: any = {};
+
+        if (status === 'PENDING') {
+            where = {
+                status: 'PENDING',
+                address: { neighborhood: { in: neighborhoodNames } }
+            };
+        } else if (status === 'IN_PROGRESS') {
+            where = {
+                status: 'IN_PROGRESS',
+                assigned_jek_id: jekId
+            };
+        } else {
+            // Status kelmasa (yoki boshqa bo'lsa), PENDING (hududidagilar) VA IN_PROGRESS (o'zidagilar)
+            where = {
+                OR: [
+                    { status: 'PENDING', address: { neighborhood: { in: neighborhoodNames } } },
+                    { status: 'IN_PROGRESS', assigned_jek_id: jekId }
+                ]
+            };
+        }
+
         const [requests, total] = await Promise.all([
             this.prisma.requests.findMany({
-                where: {
+                where,
+                select: {
+                    id: true,
+                    request_number: true,
+                    description: true,
+                    status: true,
+                    createdAt: true,
                     address: {
-                        neighborhood: { in: neighborhoodNames }
-                    } as any,
-                    status: 'PENDING',
-                },
-                include: {
-                    address: true,
-                    requestPhotos: true,
+                        select: {
+                            district: true,
+                            neighborhood: true,
+                            street: true,
+                            house: true,
+                        }
+                    },
+                    requestPhotos: {
+                        select: {
+                            id: true,
+                            file_url: true
+                        }
+                    },
+                    user: {
+                        select: {
+                            first_name: true,
+                            last_name: true,
+                            phoneNumber: true
+                        }
+                    }
                 },
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take: limit,
             } as any),
-            this.prisma.requests.count({
-                where: {
-                    address: {
-                        neighborhood: { in: neighborhoodNames }
-                    } as any,
-                    status: 'PENDING',
-                },
-            } as any),
-        ]);
-
-        return {
-            data: requests,
-            meta: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit)
-            }
-        };
-    }
-
-    async findMyActive(jekId: string, page: number = 1, limit: number = 10) {
-        const skip = (page - 1) * limit;
-
-        const [requests, total] = await Promise.all([
-            this.prisma.requests.findMany({
-                where: {
-                    assigned_jek_id: jekId,
-                    status: 'IN_PROGRESS',
-                },
-                include: {
-                    address: true,
-                    requestPhotos: true,
-                },
-                orderBy: { createdAt: 'desc' },
-                skip,
-                take: limit,
-            } as any),
-            this.prisma.requests.count({
-                where: {
-                    assigned_jek_id: jekId,
-                    status: 'IN_PROGRESS',
-                },
-            } as any),
+            this.prisma.requests.count({ where } as any),
         ]);
 
         return {

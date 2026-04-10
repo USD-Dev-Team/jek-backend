@@ -24,7 +24,7 @@ export class AddressesService {
         }
     }
 
-    async findOrCreateAddress(data: AssignAddressDto) {
+    async validateAndGetAddress (data: AssignAddressDto) {
         // 0. Hudud va mahalla mavjudligini JSON bo'yicha tekshirish
         const districts = this.mahallaData.addresses;
         if (!districts.includes(data.district)) {
@@ -62,7 +62,7 @@ export class AddressesService {
         const existJek = await this.prisma.admins.findUnique({ where: { id: adminId } });
         if (!existJek) throw new NotFoundException('Employee not found');
 
-        const address = await this.findOrCreateAddress(data);
+        const address = await this.validateAndGetAddress (data);
 
         const exists = await this.prisma.admin_addresses.findFirst({
             where: {
@@ -96,19 +96,30 @@ export class AddressesService {
         return { success: true, message: 'Hudud biriktirmasi o\'chirildi' };
     }
 
-    // Kelajakda bot va frontend uchun kerakli metodlar
-    async getAllDistricts() {
-        return this.prisma.addresses.findMany({
-            distinct: ['district'],
-            select: { district: true },
-        });
-    }
+    // // Kelajakda bot va frontend uchun kerakli metodlar
+    // async getAllDistricts() {
+    //     return this.prisma.addresses.findMany({
+    //         distinct: ['district'],
+    //         select: { district: true },
+    //     });
+    // }
 
-    async getMahallas(district: string) {
-        return this.prisma.addresses.findMany({
-            where: { district },
-            distinct: ['neighborhood'],
-            select: { neighborhood: true },
-        });
-    }
+    // async getMahallas(district: string) {
+    //     return this.prisma.addresses.findMany({
+    //         where: { district },
+    //         distinct: ['neighborhood'],
+    //         select: { neighborhood: true },
+    //     });
+    // }
+
+async findMyAddresses(jek_id: string) {
+    return this.prisma.admin_addresses.findMany({
+        where: {
+            admin_id: jek_id,
+        },
+        select:{
+            address:true,
+        }
+    });
+}
 }

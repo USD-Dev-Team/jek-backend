@@ -4,7 +4,9 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { RoleGuard } from '../../common/guards/role.guard';
 import { Roles } from '../../common/decorators/role';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
+
+import { Status_Flow } from '@prisma/client';
 
 @ApiTags('Requests (Arizalar)')
 @ApiBearerAuth('token')
@@ -21,42 +23,27 @@ export class RequestsController {
     @UseGuards(TokenGuard, RoleGuard)
     @Roles('JEK')
     @ApiBearerAuth()
-    @Get('pending')
-    @ApiOperation({ summary: 'O\'z hududidagi kutilayotgan arizalarni ko\'rish' })
+    @Get('jek/list')
+    @ApiOperation({ summary: 'Xodim uchun arizalar ro\'yxati (Pending va Progress)' })
+    @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'IN_PROGRESS'], description: 'Kelmasa har ikkala statusdagilar chiqadi' })
     @ApiQuery({ name: 'page', required: false, type: Number })
     @ApiQuery({ name: 'limit', required: false, type: Number })
-    getPendingForJek(
+    getJekRequests(
         @Request() req,
+        @Query('status') status?: Status_Flow,
         @Query('page') page: string = '1',
         @Query('limit') limit: string = '10'
     ) {
-        return this.requestsService.findPendingForJek(
+        return this.requestsService.findJekRequests(
             req.user.id,
+            status,
             parseInt(page),
             parseInt(limit)
         );
     }
 
     @UseGuards(TokenGuard, RoleGuard)
-    @Roles('JEK')
-    @ApiBearerAuth()
-    @Get('my-active')
-    @ApiOperation({ summary: 'O\'ziga biriktirilgan faol arizalarni ko\'rish' })
-    @ApiQuery({ name: 'page', required: false, type: Number })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
-    getMyActive(
-        @Request() req,
-        @Query('page') page: string = '1',
-        @Query('limit') limit: string = '10'
-    ) {
-        return this.requestsService.findMyActive(
-            req.user.id,
-            parseInt(page),
-            parseInt(limit)
-        );
-    }
-
-    @UseGuards(TokenGuard, RoleGuard)
+    @ApiParam({ name: 'id', description: 'Ariza ID (UUID)' })
     @Roles('JEK')
     @ApiBearerAuth()
     @Patch('assign/:id')

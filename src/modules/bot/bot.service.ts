@@ -196,7 +196,7 @@ export class BotService {
             throw new Error('Incomplete data for request');
         }
 
-        const addr = await this.addressesService.findOrCreateAddress({
+        const addr = await this.addressesService.validateAndGetAddress ({
             district: user.temp_district,
             neighborhood: user.temp_mahalla,
             street: user.temp_street,

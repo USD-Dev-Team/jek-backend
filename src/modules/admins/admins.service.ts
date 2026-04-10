@@ -25,11 +25,6 @@ export class AdminsService {
         phoneNumber: true,
         role: true,
         isActive: true,
-        addresses: {
-          include: {
-            address: true
-          }
-        }
       } as any,
     });
     if (!existJek) {
@@ -147,8 +142,5 @@ export class AdminsService {
       success: true,
       data: existJek,
     };
-  }
-  remove(id: number) {
-    return `This action removes a #${id} admin`;
   }
 }

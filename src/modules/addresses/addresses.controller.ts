@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, ParseUUIDPipe, Req } from '@nestjs/common';
 import { AddressesService } from './addresses.service';
 import { AssignAddressDto } from './dto/address.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
@@ -25,28 +25,36 @@ export class AddressesController {
     }
 
     @ApiOperation({ summary: "Xodimdan biriktirilgan mahallani o'chirish" })
-    @ApiParam({ name: 'adminId', description: 'Xodim ID (UUID)' })
+    @ApiParam({ name: 'jek_id', description: 'Xodim ID (UUID)' })
     @ApiParam({ name: 'addressId', description: 'Address ID (UUID)' })
     @UseGuards(TokenGuard, RoleGuard)
     @Roles('INSPECTION')
-    @Delete('remove/:adminId/:addressId')
+    @Delete('remove/:jek_id/:addressId')
     async removeAddress(
-        @Param('adminId', ParseUUIDPipe) adminId: string,
+        @Param('jek_id', ParseUUIDPipe) jek_id: string,
         @Param('addressId', ParseUUIDPipe) addressId: string,
     ) {
-        return this.addressesService.removeFromAdmin(adminId, addressId);
+        return this.addressesService.removeFromAdmin(jek_id, addressId);
     }
 
-    @ApiOperation({ summary: "Barcha mavjud tumanlar ro'yxatini olish" })
-    @Get('districts')
-    async getDistricts() {
-        return this.addressesService.getAllDistricts();
-    }
+    // @ApiOperation({ summary: "Barcha mavjud tumanlar ro'yxatini olish" })
+    // @Get('districts')
+    // async getDistricts() {
+    //     return this.addressesService.getAllDistricts();
+    // }
 
-    @ApiOperation({ summary: "Tumandagi barcha mahallalar ro'yxatini olish" })
-    @ApiQuery({ name: 'district' })
-    @Get('mahallas')
-    async getMahallas(@Query('district') district: string) {
-        return this.addressesService.getMahallas(district);
+    // @ApiOperation({ summary: "Tumandagi barcha mahallalar ro'yxatini olish" })
+    // @ApiQuery({ name: 'district' })
+    // @Get('mahallas')
+    // async getMahallas(@Query('district') district: string) {
+    //     return this.addressesService.getMahallas(district);
+    // }
+
+    @ApiOperation({ summary: "Xodim o'ziga biriktirilgan manzillar ro'yxatini olishi" })
+    @UseGuards(TokenGuard, RoleGuard)
+    @Roles('JEK')
+    @Get('my-addresses')
+    async findMyAddresses(@Req() req:Request) {
+        return this.addressesService.findMyAddresses(req["user"].id);
     }
 }
