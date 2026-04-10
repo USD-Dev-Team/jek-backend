@@ -1,11 +1,15 @@
 import {
   IsNotEmpty,
   IsString,
-  IsEnum,
   MinLength,
   Matches,
+  IsOptional,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { AssignAddressDto } from '../../addresses/dto/address.dto';
+import { Type } from 'class-transformer';
 export class RegisterDto {
   @ApiProperty({ example: "Alisher" })
   @IsNotEmpty({ message: 'Isminggizni kiriting' })
@@ -41,6 +45,13 @@ export class RegisterDto {
   @IsNotEmpty({ message: 'Parolni tasdiqlash majburiy' })
   @IsString()
   passwordConfirm: string;
+
+  @ApiProperty({ type: [AssignAddressDto], required: false })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AssignAddressDto)
+  addresses?: AssignAddressDto[];
 }
 
 export class LoginDto {
