@@ -43,7 +43,8 @@ model Users {
   temp_apartment_number  String?
   temp_address           String?
   temp_description       String?
-  temp_photos            Json? // Bir nechta rasmlar uchun file_id massivi
+  temp_photos            String[] @default([]) // Bir nechta rasmlar uchun file_id massivi
+  temp_view_message_ids  String[] @default([]) // Ko'rilayotgan ariza bilan bog'liq xabarlar ID-lari
   temp_reject_request_id String? // E'tiroz bildirilayotgan ariza ID-si
 
   createdAt DateTime   @default(now())

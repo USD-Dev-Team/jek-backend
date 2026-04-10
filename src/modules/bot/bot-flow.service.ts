@@ -109,7 +109,7 @@ export class BotFlowService {
                 return;
 
             case 'REQ_PHOTO':
-                if (text === '📸 Rasmsiz davom etish / Продолжить tanpa foto' || text.includes('Rasmsiz davom etish')) {
+                if (text && (text.includes('Rasmsiz davom etish') || text.includes('Продолжить без фото'))) {
                     await this.botService.updateUserData(userId, { registration_step: 'REQ_CONFIRM' });
                     await this.showConfirmationSummary(ctx);
                     return;

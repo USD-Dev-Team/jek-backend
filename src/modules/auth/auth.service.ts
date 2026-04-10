@@ -4,7 +4,7 @@ import {
     Injectable,
 } from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -203,6 +203,7 @@ export class AuthService {
                 role: admin.role
             };
         } catch (e) {
+            console.log(e)
             throw new BadRequestException('Token yaroqsiz yoki muddati o\'tgan / Invalid refresh token');
         }
     }
