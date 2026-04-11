@@ -66,13 +66,8 @@ export class RequestsService {
   }
 
   async getUniversalRequests(filter: UniversalFilterDto) {
-    const {
-      startDate,
-      endDate,
-      district,
-      neighborhood,
-      status,
-    } = filter;
+    const { startDate, endDate, district, neighborhood, status, search } =
+      filter;
 
     const where: any = {};
 
@@ -103,6 +98,32 @@ export class RequestsService {
       };
     }
 
+    // 3. Global Search mantiqi
+    if (search) {
+      const searchCondition = { contains: search, mode: 'insensitive' as any };
+
+      where.OR = [
+        // 1. Ariza raqami bo'yicha (masalan: REQ-1001)
+        { request_number: searchCondition },
+
+        // 2. Tuman nomi bo'yicha (Address bog'liqligi orqali)
+        {
+          user: {
+            full_name: searchCondition,
+          },
+        },
+
+        // 3. Mahalla nomi bo'yicha (Address bog'liqligi orqali)
+        {
+          user: {
+            phoneNumber: searchCondition,
+          },
+        },
+      ];
+    }
+
+    const skip =
+      (filter.page ? filter.page : 1 - 1) * (filter.limit ? filter.limit : 5);
     return this.prisma.requests.findMany({
       where,
       include: {
@@ -115,6 +136,8 @@ export class RequestsService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take: filter.limit ? filter.limit : 5,
     });
   }
 
@@ -143,14 +166,24 @@ export class RequestsService {
     // 2. Query filtri yaratish
     let where: any = {};
 
-    if (status === 'PENDING') {
+    if (status === Status_Flow.PENDING) {
       where = {
-        status: 'PENDING',
+        status: Status_Flow.PENDING,
         address: { neighborhood: { in: neighborhoodNames } },
       };
-    } else if (status === 'IN_PROGRESS') {
+    } else if (status === Status_Flow.IN_PROGRESS) {
       where = {
-        status: 'IN_PROGRESS',
+        status: Status_Flow.IN_PROGRESS,
+        assigned_jek_id: jekId,
+      };
+    } else if (status === Status_Flow.COMPLETED) {
+      where = {
+        status: Status_Flow.COMPLETED,
+        assigned_jek_id: jekId,
+      };
+    } else if (status === Status_Flow.REJECTED) {
+      where = {
+        status: Status_Flow.REJECTED,
         assigned_jek_id: jekId,
       };
     } else {
@@ -219,12 +252,18 @@ export class RequestsService {
       where: { id: requestId },
       include: { user: true },
     });
+
     if (!request) throw new ConflictException('Ariza topilmadi');
-    if (request.status !== 'PENDING')
+
+    // 1. Shartni o'zgartiramiz: Faqat PENDING yoki JEK_REJECTED bo'lsagina ruxsat beramiz
+    const allowedStatuses = ['PENDING', 'JEK_REJECTED'];
+    if (!allowedStatuses.includes(request.status)) {
       throw new ConflictException(
         'Ushbu ariza allaqachon biriktirilgan yoki yopilgan',
       );
+    }
 
+    // 2. Arizani yangilash
     const updated = await this.prisma.requests.update({
       where: { id: requestId },
       data: {
@@ -233,23 +272,30 @@ export class RequestsService {
       },
     });
 
-    // Xabar yuborish
+    // 3. Xabar yuborish
     if (request.user?.telegram_id) {
-      await this.botService.sendNotification(
-        request.user.telegram_id,
-        `⏳ <b>Arizangiz qabul qilindi!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz JEK xodimi tomonidan o'rganish uchun qabul qilindi.`,
-      );
+      let msg = `⏳ <b>Arizangiz qabul qilindi!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz JEK xodimi tomonidan o'rganish uchun qabul qilindi.`;
+
+      // Agar oldingi holat rad etilgan bo'lsa, xabarni biroz o'zgartirish mumkin
+      if (request.status === 'JEK_REJECTED') {
+        msg = `⏳ <b>Arizangiz qayta ko'rib chiqilmoqda!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz e'tirozdan so'ng JEK xodimi tomonidan qayta ishga tushirildi.`;
+      }
+
+      await this.botService.sendNotification(request.user.telegram_id, msg);
     }
 
-    // Log yaratish
+    // 4. Log yaratish (old_status endi dinamik: PENDING yoki JEK_REJECTED bo'ladi)
     await this.prisma.requestStatusLog.create({
       data: {
         request_id: requestId,
-        old_status: 'PENDING' as Status_Flow,
+        old_status: request.status as Status_Flow,
         new_status: 'IN_PROGRESS' as Status_Flow,
         changed_by_role: 'JEK',
         changed_by_id: jekId,
-        note: "Ariza xodim tomonidan ko'rib chiqish uchun qabul qilindi",
+        note:
+          request.status === 'JEK_REJECTED'
+            ? "E'tirozdan so'ng ariza qayta biriktirildi"
+            : "Ariza xodim tomonidan ko'rib chiqish uchun qabul qilindi",
       },
     });
 

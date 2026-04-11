@@ -13,7 +13,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AdminsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   //Admin profilini ko'rish
   async findSelf(id: string) {
@@ -25,14 +25,23 @@ export class AdminsService {
         phoneNumber: true,
         role: true,
         isActive: true,
-      } as any,
+        addresses: {
+          select: {
+            address: {
+              select: { id: true, district: true, neighborhood: true },
+            },
+          },
+        },
+      },
     });
     if (!existJek) {
       throw new NotFoundException('Employee not found');
     }
+    const {addresses,...payload}=existJek
+    const cleanAdresses=existJek.addresses.map(el=>el.address)
     return {
       success: true,
-      data: existJek,
+      data: {...payload,addresses:[...cleanAdresses]},
     };
   }
 
@@ -75,7 +84,7 @@ export class AdminsService {
       success: true,
       message: updateStatus.isActive
         ? 'Xodim faollashtirildi'
-        : 'Xodim nofaol holatga o\'tkazildi',
+        : "Xodim nofaol holatga o'tkazildi",
     };
   }
 
@@ -109,12 +118,12 @@ export class AdminsService {
         isActive: true,
         createdAt: true,
       } as any,
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     return {
       success: true,
-      data: admins
+      data: admins,
     };
   }
 
@@ -130,9 +139,9 @@ export class AdminsService {
         isActive: true,
         addresses: {
           select: {
-            address: true
-          }
-        }
+            address: true,
+          },
+        },
       } as any,
     });
     if (!existJek) {

@@ -229,6 +229,39 @@ export class BotUpdate {
     }
   }
 
+  @Action(/^user_reject_req_/)
+  async onRejectRequest(ctx: Context) {
+    if (!ctx.from || !ctx.chat || !('data' in ctx.callbackQuery!)) return;
+
+    try {
+      const user = await this.botService.getUserById(ctx.from.id);
+
+      if (user && user.temp_view_message_ids) {
+        for (const msgId of user.temp_view_message_ids as string[]) {
+          // Endi TypeScript ctx.chat.id dan qo'rqmaydi
+          await ctx.telegram
+            .deleteMessage(ctx.chat.id, parseInt(msgId))
+            .catch(() => {});
+        }
+      }
+
+      const reqId = (ctx.callbackQuery as any).data.split('_')[3];
+
+      // 2. Foydalanuvchi holatini (step) o'zgartirish
+      // Bu yerda foydalanuvchiga rad etish sababini yozishini so'raymiz
+      await this.botService.updateUserData(ctx.from.id, {
+        registration_step: 'REQ_USER_REJECTION_REASON',
+        temp_reject_request_id: reqId, // Qaysi arizani rad etayotganini saqlab qo'yamiz
+        temp_view_message_ids: [],
+      });
+
+      await ctx.reply("❌ Iltimos, e'tirozingiz sababini yozib yuboring:");
+      await ctx.answerCbQuery();
+    } catch (error) {
+      this.logger.error('Error onRejectRequest:', error);
+    }
+  }
+
   @Action(/^back_to_list_/)
   async onBackToList(ctx: Context) {
     // Chat va User borligini tekshiramiz
