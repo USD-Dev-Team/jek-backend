@@ -122,4 +122,20 @@ export class UniversalFilterDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional({ description: 'Qidiruv maydoni' })
+  @IsOptional()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Qidiruv maydoni' })
+  @IsOptional()
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ description: 'Qidiruv maydoni' })
+  @IsOptional()
+  @Type(() => Number)
+  limit?: number;
+
+  //tartib raqam, full_name, phone_number
 }

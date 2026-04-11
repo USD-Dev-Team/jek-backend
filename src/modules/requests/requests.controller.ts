@@ -4,9 +4,10 @@ import { CreateRequestDto, UniversalFilterDto } from './dto/create-request.dto';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { RoleGuard } from '../../common/guards/role.guard';
 import { Roles } from '../../common/decorators/role';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
 
 import { jekRoles, Status_Flow } from '@prisma/client';
+import { CompleteRequestDto, RejectRequestDto } from './dto/update-request-status.dto';
 
 @ApiTags('Requests (Arizalar)')
 @ApiBearerAuth('token')
@@ -77,10 +78,10 @@ export class RequestsController {
   @ApiOperation({ summary: 'Arizani bajarilgan deb belgilash (JEK_COMPLETED)' })
   complete(
     @Param('id') id: string,
-    @Body('note') note: string,
+    @Body() note: CompleteRequestDto,
     @Request() req,
   ) {
-    return this.requestsService.complete(id, req.user.id, note);
+    return this.requestsService.complete(id, req.user.id, note.note);
   }
 
   @UseGuards(TokenGuard, RoleGuard)
@@ -90,9 +91,9 @@ export class RequestsController {
   @ApiOperation({ summary: 'Arizani rad etish (JEK_REJECTED)' })
   reject(
     @Param('id') id: string,
-    @Body('reason') reason: string,
+    @Body() reason: RejectRequestDto,
     @Request() req,
   ) {
-    return this.requestsService.reject(id, req.user.id, reason);
+    return this.requestsService.reject(id, req.user.id, reason.reason);
   }
 }

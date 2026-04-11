@@ -93,7 +93,7 @@ export class BotService {
     await this.prisma.requests.update({
       where: { id: requestId },
       data: {
-        status: 'PENDING' as Status_Flow,
+        status: 'REJECTED' as Status_Flow,
         note: reason, // Foydalanuvchi e'tirozini note sifatida saqlash
         rejection_reason: null, // Eski rad etish sababini o'chirib tashlash
       } as any,
@@ -104,7 +104,7 @@ export class BotService {
       data: {
         request_id: requestId,
         old_status: request.status,
-        new_status: 'PENDING',
+        new_status: 'REJECTED',
         changed_by_role: 'USER',
         changed_by_id: String(telegramId),
         note: reason,
