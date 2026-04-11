@@ -29,7 +29,7 @@ export class BotFlowService {
    */
   async handleRegistration(ctx: Context, user: any, message: any) {
     const text = message.text;
-    const userId = ctx.from!.id;
+    const userId = BigInt(ctx.from!.id);
     const currentStep = user.registration_step;
 
     this.logger.log(
@@ -92,7 +92,7 @@ export class BotFlowService {
    */
   async handleRequestFlow(ctx: Context, user: any, message: any) {
     const text = message.text;
-    const userId = ctx.from!.id;
+    const userId = BigInt(ctx.from!.id);
 
     switch (user.registration_step) {
       case 'REQ_DISTRICT':
@@ -261,7 +261,7 @@ export class BotFlowService {
 
   async showConfirmationSummary(ctx: Context) {
     const latestUser: any = await this.botService.findOrCreateUser(
-      ctx.from!.id,
+      BigInt(ctx.from!.id),
     );
     const photoCount = Array.isArray(latestUser.temp_photos)
       ? latestUser.temp_photos.length

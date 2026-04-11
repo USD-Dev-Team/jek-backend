@@ -307,7 +307,16 @@ export class RequestsService {
       where: { id: requestId },
       include: { user: true },
     });
+
     if (!request) throw new ConflictException('Ariza topilmadi');
+
+    // Tekshiruv: Faqat IN_PROGRESS holatidagi arizani yopish mumkin
+    if (request.status !== 'IN_PROGRESS') {
+      throw new ConflictException(
+        'Faqat jarayondagi arizalarni yakunlash mumkin',
+      );
+    }
+
     if (request.assigned_jek_id !== jekId)
       throw new ConflictException('Sizga biriktirilmagan arizani yopolmaysiz');
 
@@ -337,6 +346,12 @@ export class RequestsService {
         ],
       ]);
 
+      // MUHIM: Foydalanuvchi javob yozishi uchun uning stepini yangilab qo'yamiz
+      // Bu foydalanuvchi bemalol e'tiroz yozishi yoki tasdiqlashi uchun kerak
+      await this.botService.updateUserData(request.user.telegram_id, {
+        registration_step: 'COMPLETED', // Asosiy holatda tursin
+      });
+
       await this.botService.sendNotificationWithButtons(
         request.user.telegram_id,
         `✅ <b>Murojaat JEK tomonidan yakunlandi!</b>\n\nSizning #${request.request_number} raqamli arizangiz xodim tomonidan bajarildi deb belgilandi.\n\n📝 <b>Xodim izohi:</b> ${note || "Ko'rsatilmagan"}\n\n<i>Iltimos, ish sifatini tasdiqlang yoki e'tiroz bildiring:</i>`,
@@ -344,10 +359,11 @@ export class RequestsService {
       );
     }
 
+    // Log yaratish
     await this.prisma.requestStatusLog.create({
       data: {
         request_id: requestId,
-        old_status: 'IN_PROGRESS' as Status_Flow,
+        old_status: request.status as Status_Flow, // Dinamik qildik (oldin IN_PROGRESS edi)
         new_status: 'JEK_COMPLETED' as Status_Flow,
         changed_by_role: 'JEK',
         changed_by_id: jekId,
@@ -357,7 +373,7 @@ export class RequestsService {
 
     return { success: true, message: 'Ariza yakunlandi' };
   }
-
+  
   async reject(requestId: string, jekId: string, reason: string) {
     const request = await this.prisma.requests.findUnique({
       where: { id: requestId },
