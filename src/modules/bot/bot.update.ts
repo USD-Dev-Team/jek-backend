@@ -11,17 +11,19 @@ export class BotUpdate {
   constructor(
     private readonly botService: BotService,
     private readonly botFlowService: BotFlowService,
-  ) {}
+  ) { }
 
   @Start()
   async onStart(ctx: Context) {
     if (!ctx.from) return;
     try {
-      let user: any = await this.botService.findOrCreateUser(ctx.from.id);
+      let user: any = await this.botService.findOrCreateUser(
+        BigInt(ctx.from.id),
+      );
 
       // Agar foydalanuvchi ariza yaratish bosqichida bo'lsa, barchasini reset qilish va menyuni ko'rsatish
       if (user.registration_step && user.registration_step.startsWith('REQ_')) {
-        user = await this.botService.updateUserData(ctx.from.id, {
+        user = await this.botService.updateUserData(BigInt(ctx.from.id), {
           registration_step: 'COMPLETED',
           temp_district: null,
           temp_mahalla: null,
@@ -66,7 +68,7 @@ export class BotUpdate {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
     try {
       const district = (ctx.callbackQuery as any).data.replace('dist_', '');
-      await this.botService.updateUserData(ctx.from.id, {
+      await this.botService.updateUserData(BigInt(ctx.from.id), {
         temp_district: district,
         registration_step: 'REQ_MAHALLA',
       });
@@ -87,7 +89,7 @@ export class BotUpdate {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
     try {
       const mahalla = (ctx.callbackQuery as any).data.replace('mhl_', '');
-      await this.botService.updateUserData(ctx.from.id, {
+      await this.botService.updateUserData(BigInt(ctx.from.id), {
         temp_mahalla: mahalla,
         registration_step: 'REQ_BUILDING',
       });
@@ -108,17 +110,59 @@ export class BotUpdate {
     }
   }
 
+  @Action(/^user_confirm_req_/)
+  async onConfirmRequest(ctx: Context) {
+    if (!ctx.from || !ctx.chat || !('data' in ctx.callbackQuery!)) return;
+
+    try {
+      // 1. Telegramdan IDni ajratib olamiz
+      const requestId = (ctx.callbackQuery as any).data.split('_')[3];
+
+      // 2. Darhol javob beramiz (soat aylanib turmasligi uchun)
+      await ctx.answerCbQuery('Tasdiqlandi! / Подтверждено!').catch(() => { });
+
+      // 3. Bazada statusni yangilaymiz
+      await this.botService.confirmRequest(requestId);
+
+      // 4. Avvalgi ko'rilgan xabarlarni (rasmlar va info) tozalaymiz
+      const user = await this.botService.getUserById(BigInt(ctx.from.id));
+      if (user && user.temp_view_message_ids) {
+        for (const msgId of user.temp_view_message_ids as string[]) {
+          await ctx.telegram
+            .deleteMessage(ctx.chat.id, parseInt(msgId))
+            .catch(() => { });
+        }
+      }
+
+      // 5. User stepini tozalaymiz va xabar yuboramiz
+      await this.botService.updateUserData(BigInt(ctx.from.id), {
+        temp_view_message_ids: [],
+        registration_step: 'COMPLETED',
+      });
+
+      await ctx.reply(
+        '✅ Rahmat! Ariza muvaffaqiyatli yopildi. / Спасибо! Заявка успешно закрыта.',
+        this.botFlowService.mainMenu(),
+      );
+    } catch (error) {
+      this.logger.error('Error onConfirmRequest:', error);
+      await ctx.reply('Xatolik yuz berdi. / Произошла ошибка.');
+    }
+  }
+
   @Action(/^requests_page_/)
   async onPageChange(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
     try {
-      const user: any = await this.botService.findOrCreateUser(ctx.from.id);
+      const user: any = await this.botService.findOrCreateUser(
+        BigInt(ctx.from.id),
+      );
       // Ko'rilgan ariza xabarlarini tozalash (agar bo'lsa)
       if (user.temp_view_message_ids && user.temp_view_message_ids.length > 0) {
         for (const msgId of user.temp_view_message_ids) {
-          await ctx.deleteMessage(parseInt(msgId)).catch(() => {});
+          await ctx.deleteMessage(parseInt(msgId)).catch(() => { });
         }
-        await this.botService.updateUserData(ctx.from.id, {
+        await this.botService.updateUserData(BigInt(ctx.from.id), {
           temp_view_message_ids: [],
         });
       }
@@ -152,7 +196,7 @@ export class BotUpdate {
       }
 
       // 1. Avvalgi xabarlarni tozalash (agar bo'lsa)
-      await ctx.deleteMessage().catch(() => {});
+      await ctx.deleteMessage().catch(() => { });
 
       const addr = req.address;
       const fullAddr = `${addr.district}, ${addr.neighborhood} ${addr.building_number ? ', ' + addr.building_number + '-bino' : ''}${addr.apartment_number ? ', ' + addr.apartment_number + '-xonadon' : ''}`;
@@ -219,7 +263,7 @@ export class BotUpdate {
       sentIds.push(infoMsg.message_id.toString());
 
       // 4. Barcha yuborilgan xabarlar ID-sini saqlash
-      await this.botService.updateUserData(ctx.from.id, {
+      await this.botService.updateUserData(BigInt(ctx.from.id), {
         temp_view_message_ids: sentIds,
       });
 
@@ -234,14 +278,14 @@ export class BotUpdate {
     if (!ctx.from || !ctx.chat || !('data' in ctx.callbackQuery!)) return;
 
     try {
-      const user = await this.botService.getUserById(ctx.from.id);
+      const user = await this.botService.getUserById(BigInt(ctx.from.id));
 
       if (user && user.temp_view_message_ids) {
         for (const msgId of user.temp_view_message_ids as string[]) {
           // Endi TypeScript ctx.chat.id dan qo'rqmaydi
           await ctx.telegram
             .deleteMessage(ctx.chat.id, parseInt(msgId))
-            .catch(() => {});
+            .catch(() => { });
         }
       }
 
@@ -249,7 +293,7 @@ export class BotUpdate {
 
       // 2. Foydalanuvchi holatini (step) o'zgartirish
       // Bu yerda foydalanuvchiga rad etish sababini yozishini so'raymiz
-      await this.botService.updateUserData(ctx.from.id, {
+      await this.botService.updateUserData(BigInt(ctx.from.id), {
         registration_step: 'REQ_USER_REJECTION_REASON',
         temp_reject_request_id: reqId, // Qaysi arizani rad etayotganini saqlab qo'yamiz
         temp_view_message_ids: [],
@@ -272,7 +316,7 @@ export class BotUpdate {
       const page = data[3] || '1';
 
       // 1. Foydalanuvchini olamiz (IDlarni bilish uchun)
-      const user = await this.botService.getUserById(ctx.from.id);
+      const user = await this.botService.getUserById(BigInt(ctx.from.id));
 
       // 2. Ko'rilgan ariza xabarlarini va rasmlarni tozalaymiz
       if (
@@ -284,11 +328,11 @@ export class BotUpdate {
           // ctx.chat.id dan foydalanamiz, chunki bu xavfsizroq
           await ctx.telegram
             .deleteMessage(ctx.chat.id, parseInt(msgId))
-            .catch(() => {});
+            .catch(() => { });
         }
 
         // Bazadagi IDlarni tozalaymiz
-        await this.botService.updateUserData(ctx.from.id, {
+        await this.botService.updateUserData(BigInt(ctx.from.id), {
           temp_view_message_ids: [],
         });
       }
@@ -330,13 +374,15 @@ export class BotUpdate {
       const msgs = await ctx.replyWithMediaGroup(mediaGroup);
 
       // Yuborilgan rasmlarni ham o'chiriladiganlar ro'yxatiga qo'shish
-      const user: any = await this.botService.findOrCreateUser(ctx.from.id);
+      const user: any = await this.botService.findOrCreateUser(
+        BigInt(ctx.from.id),
+      );
       const currentIds = user.temp_view_message_ids || [];
       const newIds = [
         ...currentIds,
         ...msgs.map((m) => m.message_id.toString()),
       ];
-      await this.botService.updateUserData(ctx.from.id, {
+      await this.botService.updateUserData(BigInt(ctx.from.id), {
         temp_view_message_ids: newIds,
       });
 
@@ -350,12 +396,14 @@ export class BotUpdate {
   async onMessage(ctx: Context) {
     if (!ctx.from) return;
     try {
-      const user: any = await this.botService.findOrCreateUser(ctx.from.id);
+      const user: any = await this.botService.findOrCreateUser(
+        BigInt(ctx.from.id),
+      );
       const message = ctx.message as any;
       const text = message.text;
 
       if (text === '❌ Bekor qilish / Отмена' || text === '❌ Bekor qilish') {
-        await this.botService.updateUserData(ctx.from.id, {
+        await this.botService.updateUserData(BigInt(ctx.from.id), {
           registration_step: 'COMPLETED',
           temp_district: null,
           temp_mahalla: null,
@@ -385,9 +433,9 @@ export class BotUpdate {
         await this.botService.processUserRejection(
           requestId,
           text,
-          ctx.from.id,
+          BigInt(ctx.from.id),
         );
-        await this.botService.updateUserData(ctx.from.id, {
+        await this.botService.updateUserData(BigInt(ctx.from.id), {
           registration_step: 'COMPLETED',
           temp_reject_request_id: null,
         });
@@ -404,7 +452,7 @@ export class BotUpdate {
           text === '✍️ Ariza yaratish / Создать заявку' ||
           text === '✍️ Ariza yaratish'
         ) {
-          await this.botService.updateUserData(ctx.from.id, {
+          await this.botService.updateUserData(BigInt(ctx.from.id), {
             registration_step: 'REQ_DISTRICT',
           });
           await ctx.reply(
@@ -454,7 +502,7 @@ export class BotUpdate {
   async listRequests(ctx: Context, page: number, isEdit: boolean = false) {
     if (!ctx.from) return;
     const { requests, totalPages, total } =
-      await this.botService.getUserRequests(ctx.from.id, page);
+      await this.botService.getUserRequests(BigInt(ctx.from.id), page);
     if (total === 0) {
       const msg =
         'Sizda hozircha faol arizalaringiz mavjud emas. / У вас пока нет активных заявок.';
@@ -507,7 +555,7 @@ export class BotUpdate {
       } catch (e) {
         // Agar tahrirlash imkonsiz bo'lsa (masalan, rasm xabar bo'lsa), yangi xabar yuboramiz
         await ctx.reply(message, { parse_mode: 'HTML', ...keyboard });
-        await ctx.deleteMessage().catch(() => {}); // Eski xabarni o'chirib tashlaymiz
+        await ctx.deleteMessage().catch(() => { }); // Eski xabarni o'chirib tashlaymiz
       }
     } else {
       await ctx.reply(message, { parse_mode: 'HTML', ...keyboard });
@@ -541,7 +589,9 @@ export class BotUpdate {
         );
         break;
       case 'REQ_MAHALLA':
-        const u: any = await this.botService.findOrCreateUser(ctx.from!.id);
+        const u: any = await this.botService.findOrCreateUser(
+          BigInt(ctx.from!.id),
+        );
         await ctx.reply(
           'Mahalla nomini tanlang: / Выберите махаллю:',
           this.botFlowService.mahallaMenu(u.temp_district),

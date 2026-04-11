@@ -19,11 +19,11 @@ export class BotService {
     private readonly requestPhotosService: RequestPhotosService,
     private readonly addressesService: AddressesService,
     @InjectBot() private bot: Telegraf<Context>,
-  ) {}
+  ) { }
 
-  async getUserById(telegramId: number) {
+  async getUserById(telegramId: bigint) {
     return this.prisma.users.findUnique({
-      where: { telegram_id: BigInt(telegramId) },
+      where: { telegram_id: telegramId },
     });
   }
 
@@ -82,7 +82,7 @@ export class BotService {
   async processUserRejection(
     requestId: string,
     reason: string,
-    telegramId: number,
+    telegramId: bigint,
   ) {
     const request = await this.prisma.requests.findUnique({
       where: { id: requestId },
@@ -112,15 +112,28 @@ export class BotService {
     });
   }
 
-  async findOrCreateUser(telegramId: number) {
+  /**
+   * Foydalanuvchi arizani muvaffaqiyatli yakunlanganini tasdiqlaydi
+   */
+  async confirmRequest(requestId: string) {
+    return this.prisma.requests.update({
+      where: { id: requestId },
+      data: {
+        status: 'COMPLETED' as Status_Flow,
+        completedAt: new Date(),
+      } as any,
+    });
+  }
+
+  async findOrCreateUser(telegramId: BigInt) {
     let user: any = await this.prisma.users.findUnique({
-      where: { telegram_id: BigInt(telegramId) } as any,
+      where: { telegram_id: telegramId } as any,
     });
 
     if (!user) {
       user = await this.prisma.users.create({
         data: {
-          telegram_id: BigInt(telegramId),
+          telegram_id: telegramId,
           registration_step: 'FULL_NAME',
         } as any,
       });
@@ -136,7 +149,7 @@ export class BotService {
     return user;
   }
 
-  async updateUserData(telegramId: number, data: any) {
+  async updateUserData(telegramId: BigInt, data: any) {
     if (data.phoneNumber) {
       data.phoneNumber = data.phoneNumber.replace(/\D/g, '');
       if (data.phoneNumber.length === 9)
@@ -144,7 +157,7 @@ export class BotService {
     }
 
     const updated = await this.prisma.users.update({
-      where: { telegram_id: BigInt(telegramId) } as any,
+      where: { telegram_id: telegramId } as any,
       data: data as any,
     });
 
@@ -154,9 +167,9 @@ export class BotService {
     return updated;
   }
 
-  async addTempPhoto(telegramId: number, fileId: string) {
+  async addTempPhoto(telegramId: bigint, fileId: string) {
     return this.prisma.users.update({
-      where: { telegram_id: BigInt(telegramId) } as any,
+      where: { telegram_id: telegramId } as any,
       data: {
         temp_photos: {
           push: fileId,
@@ -166,12 +179,12 @@ export class BotService {
   }
 
   async getUserRequests(
-    telegramId: number,
+    telegramId: bigint,
     page: number = 1,
     limit: number = 5,
   ) {
     const user = await this.prisma.users.findUnique({
-      where: { telegram_id: BigInt(telegramId) } as any,
+      where: { telegram_id: telegramId } as any,
     });
 
     if (!user) return { total: 0, requests: [], page: 1, totalPages: 0 };
@@ -231,9 +244,9 @@ export class BotService {
     });
   }
 
-  async createRequestFromTemp(telegramId: number) {
+  async createRequestFromTemp(telegramId: bigint) {
     const user: any = await this.prisma.users.findUnique({
-      where: { telegram_id: BigInt(telegramId) } as any,
+      where: { telegram_id: telegramId } as any,
     });
 
     if (
@@ -288,7 +301,7 @@ export class BotService {
     }
 
     await this.prisma.users.update({
-      where: { telegram_id: BigInt(telegramId) } as any,
+      where: { telegram_id: telegramId } as any,
       data: {
         registration_step: 'COMPLETED',
         temp_district: null,
