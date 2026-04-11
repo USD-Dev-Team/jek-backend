@@ -1,12 +1,12 @@
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Controller, Post, Body, InternalServerErrorException, HttpException } from '@nestjs/common';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
 import { AuthService } from './auth.service';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @ApiOperation({
     summary: "Adminlarni ro'yxatdan o'tkazish",
@@ -19,8 +19,8 @@ export class AuthController {
 
       return {
         message: result.message,
-        userId:result.userId,
-        role:result.role,
+        userId: result.userId,
+        role: result.role,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };
@@ -42,11 +42,26 @@ export class AuthController {
 
       return {
         message: result.message,
-        userId:result.userId,
-        role:result.role,
+        userId: result.userId,
+        role: result.role,
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Serverda xatolik yuz berdi');
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Refresh token orqali tokenni yangilash',
+    description:
+      'Refresh token yuboriladi va yangi access hamda refresh token olinadi.',
+  })
+  @Post('jek/refresh')
+  async refresh(@Body() payload: RefreshTokenDto) {
+    try {
+      return await this.authService.refreshTokens(payload.refreshToken);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Serverda xatolik yuz berdi');

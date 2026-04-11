@@ -73,3 +73,10 @@ export class LoginDto {
   @IsNotEmpty({ message: 'Parol kiritilishi shart' })
   password: string;
 }
+
+export class RefreshTokenDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty({ message: 'Token kiritilishi shart' })
+  refreshToken: string;
+}

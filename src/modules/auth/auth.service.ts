@@ -4,7 +4,7 @@ import {
     Injectable,
 } from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -142,5 +142,69 @@ export class AuthService {
             refreshToken,
             accessToken,
         };
+    }
+
+    async refreshTokens(refreshToken: string) {
+        try {
+            // 1. Refresh tokenni tekshirish
+            const payload = await this.jwt.verifyAsync(refreshToken, {
+                secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+            });
+
+            // 2. Bazadan foydalanuvchini topish
+            const admin: any = await this.prisma.admins.findUnique({
+                where: { id: payload.id },
+            });
+
+            if (!admin || !admin.refreshToken) {
+                throw new BadRequestException('Ruxsat etilmadi / Access Denied');
+            }
+
+            // 3. Token mosligini (hash orqali) tekshirish
+            const refreshTokenMatches = await bcrypt.compare(
+                refreshToken,
+                admin.refreshToken,
+            );
+
+            if (!refreshTokenMatches) {
+                throw new BadRequestException('Ruxsat etilmadi / Access Denied');
+            }
+
+            // 4. Yangi tokenlar generatsiya qilish
+            const jti = crypto.randomUUID();
+            const newPayload = {
+                id: admin.id,
+                role: admin.role,
+                phoneNumber: admin.phoneNumber,
+            };
+
+            const newAccessToken = await this.jwt.signAsync(newPayload, {
+                secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+                expiresIn: '1h',
+            });
+
+            const newRefreshToken = await this.jwt.signAsync(newPayload, {
+                secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+                expiresIn: '7d',
+            });
+
+            // 5. Yangi refresh tokenni bazaga saqlash
+            const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 12);
+
+            await this.prisma.admins.update({
+                where: { id: admin.id },
+                data: { refreshToken: hashedRefreshToken, jti } as any,
+            });
+
+            return {
+                accessToken: newAccessToken,
+                refreshToken: newRefreshToken,
+                userId: admin.id,
+                role: admin.role
+            };
+        } catch (e) {
+            console.log(e)
+            throw new BadRequestException('Token yaroqsiz yoki muddati o\'tgan / Invalid refresh token');
+        }
     }
 }
