@@ -10,6 +10,7 @@ import {
 } from './dto/update-admin.dto';
 import { PrismaService } from 'src/core/database/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { jekRoles } from '@prisma/client';
 
 @Injectable()
 export class AdminsService {
