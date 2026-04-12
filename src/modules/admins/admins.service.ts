@@ -15,6 +15,57 @@ import * as bcrypt from 'bcrypt';
 export class AdminsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async onModuleInit() {
+    await this.seedAdmins();
+  }
+
+  private async seedAdmins() {
+    const password = 'Admin123!';
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const governmentUsers = [
+      { first_name: 'Gov', last_name: 'User 1', phoneNumber: '+998901000001' },
+      { first_name: 'Gov', last_name: 'User 2', phoneNumber: '+998901000002' },
+      { first_name: 'Gov', last_name: 'User 3', phoneNumber: '+998901000003' },
+      { first_name: 'Gov', last_name: 'User 4', phoneNumber: '+998901000004' },
+    ];
+
+    for (const user of governmentUsers) {
+      await this.prisma.admins.upsert({
+        where: { phoneNumber: user.phoneNumber },
+        update: {},
+        create: {
+          ...user,
+          password: hashedPassword,
+          role: jekRoles.Government,
+          isActive: true,
+        },
+      });
+    }
+
+    const inspectionUsers = [
+      { first_name: 'Insp', last_name: 'User 1', phoneNumber: '+998902000001' },
+      { first_name: 'Insp', last_name: 'User 2', phoneNumber: '+998902000002' },
+      { first_name: 'Insp', last_name: 'User 3', phoneNumber: '+998902000003' },
+      { first_name: 'Insp', last_name: 'User 4', phoneNumber: '+998902000004' },
+    ];
+
+    for (const user of inspectionUsers) {
+      await this.prisma.admins.upsert({
+        where: { phoneNumber: user.phoneNumber },
+        update: {},
+        create: {
+          ...user,
+          password: hashedPassword,
+          role: jekRoles.INSPECTION,
+          isActive: true,
+        },
+      });
+    }
+
+    console.log('✅ Seed completed');
+  }
+
   //Admin profilini ko'rish
   async findSelf(id: string) {
     const existJek = await this.prisma.admins.findUnique({
@@ -37,11 +88,11 @@ export class AdminsService {
     if (!existJek) {
       throw new NotFoundException('Employee not found');
     }
-    const {addresses,...payload}=existJek
-    const cleanAdresses=existJek.addresses.map(el=>el.address)
+    const { addresses, ...payload } = existJek;
+    const cleanAdresses = existJek.addresses.map((el) => el.address);
     return {
       success: true,
-      data: {...payload,addresses:[...cleanAdresses]},
+      data: { ...payload, addresses: [...cleanAdresses] },
     };
   }
 
