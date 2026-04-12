@@ -128,6 +128,7 @@ export class RequestsService {
       where,
       include: {
         address: true,
+        requestPhotos: true,
         user: {
           select: {
             full_name: true,
@@ -373,7 +374,7 @@ export class RequestsService {
 
     return { success: true, message: 'Ariza yakunlandi' };
   }
-  
+
   async reject(requestId: string, jekId: string, reason: string) {
     const request = await this.prisma.requests.findUnique({
       where: { id: requestId },
