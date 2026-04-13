@@ -22,13 +22,13 @@ export class AdminsService {
 
   private async seedAdmins() {
     const password = 'Admin123!';
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     const governmentUsers = [
-      { first_name: 'Gov', last_name: 'User 1', phoneNumber: '+998901000001' },
-      { first_name: 'Gov', last_name: 'User 2', phoneNumber: '+998901000002' },
-      { first_name: 'Gov', last_name: 'User 3', phoneNumber: '+998901000003' },
-      { first_name: 'Gov', last_name: 'User 4', phoneNumber: '+998901000004' },
+      { first_name: 'Gov', last_name: 'User 1', phoneNumber: '998901000001' },
+      { first_name: 'Gov', last_name: 'User 2', phoneNumber: '998901000002' },
+      { first_name: 'Gov', last_name: 'User 3', phoneNumber: '998901000003' },
+      { first_name: 'Gov', last_name: 'User 4', phoneNumber: '998901000004' },
     ];
 
     for (const user of governmentUsers) {
@@ -45,10 +45,10 @@ export class AdminsService {
     }
 
     const inspectionUsers = [
-      { first_name: 'Insp', last_name: 'User 1', phoneNumber: '+998902000001' },
-      { first_name: 'Insp', last_name: 'User 2', phoneNumber: '+998902000002' },
-      { first_name: 'Insp', last_name: 'User 3', phoneNumber: '+998902000003' },
-      { first_name: 'Insp', last_name: 'User 4', phoneNumber: '+998902000004' },
+      { first_name: 'Insp', last_name: 'User 1', phoneNumber: '998902000001' },
+      { first_name: 'Insp', last_name: 'User 2', phoneNumber: '998902000002' },
+      { first_name: 'Insp', last_name: 'User 3', phoneNumber: '998902000003' },
+      { first_name: 'Insp', last_name: 'User 4', phoneNumber: '998902000004' },
     ];
 
     for (const user of inspectionUsers) {
