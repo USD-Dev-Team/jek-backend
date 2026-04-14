@@ -7,7 +7,7 @@ import {
   Matches,
   IsArray,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateAdminDto {
   @ApiProperty({ default: 'Alisher' })
@@ -45,4 +45,54 @@ export class updateStatusDto {
   @ApiProperty({ default: true })
   @IsNotEmpty()
   isActive: boolean;
+}
+
+export class UniversalStaffSearch {
+  @ApiPropertyOptional({
+    description: 'Ismi',
+    example: 'Ali',
+  })
+  @IsOptional()
+  @IsString()
+  first_name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Familyasi',
+    example: 'Valiyev',
+  })
+  @IsOptional()
+  @IsString()
+  last_name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Tuman nomi',
+    example: 'Guliston tumani',
+  })
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @ApiPropertyOptional({
+    description: 'Mahalla yoki kvartal nomi',
+    example: 'Namuna',
+  })
+  @IsOptional()
+  @IsString()
+  neighborhood?: string;
+
+  @ApiPropertyOptional({
+    description: 'Telefon raqami',
+    example: '+998901234567',
+  })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ariza holati',
+    example: true,
+  })
+  @IsOptional()
+  @IsString()
+  isActive?: boolean;
 }

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   ChangePasswordDto,
+  UniversalStaffSearch,
   UpdateAdminDto,
   updateStatusDto,
 } from './dto/update-admin.dto';
@@ -38,7 +39,7 @@ export class AdminsService {
         create: {
           ...user,
           password: hashedPassword,
-          role: jekRoles.Government,
+          role: jekRoles.GOVERNMENT,
           isActive: true,
         },
       });
@@ -202,6 +203,84 @@ export class AdminsService {
     return {
       success: true,
       data: existJek,
+    };
+  }
+
+  async universalStaffSearch(dto: UniversalStaffSearch) {
+    const {
+      first_name,
+      last_name,
+      district,
+      neighborhood,
+      phoneNumber,
+      isActive,
+    } = dto;
+
+    // 1. Dinamik filtr ob'ekti
+    const where: any = {};
+
+    // 2. Ism bo'yicha qidiruv
+    if (first_name) {
+      where.first_name = {
+        contains: first_name,
+        mode: 'insensitive',
+      };
+    }
+
+    // 3. Familiya bo'yicha qidiruv
+    if (last_name) {
+      where.last_name = {
+        contains: last_name,
+        mode: 'insensitive',
+      };
+    }
+
+    // 4. Telefon raqami (faqat raqamlarni solishtiramiz)
+    if (phoneNumber) {
+      where.phoneNumber = {
+        contains: phoneNumber.replace(/\D/g, ''),
+      };
+    }
+
+    // 5. Faollik holati (Stringdan Boolean'ga o'tkazamiz)
+    if (isActive !== undefined) {
+      where.isActive = String(isActive) === 'true';
+    }
+
+    // 6. Hududiy qidiruv (Admin_addresses -> address bog'liqligi orqali)
+    if (district || neighborhood) {
+      where.addresses = {
+        some: {
+          address: {
+            ...(district && {
+              district: { contains: district, mode: 'insensitive' },
+            }),
+            ...(neighborhood && {
+              neighborhood: { contains: neighborhood, mode: 'insensitive' },
+            }),
+          },
+        },
+      };
+    }
+
+    // 7. Bazadan qidirish
+    const [staff, total] = await Promise.all([
+      this.prisma.admins.findMany({
+        where,
+        include: {
+          addresses: {
+            include: { address: true },
+          },
+        },
+        orderBy: { first_name: 'asc' },
+      }),
+      this.prisma.admins.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      total,
+      data: staff,
     };
   }
 }

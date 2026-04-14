@@ -6,7 +6,8 @@ import { RequestPhotosService } from '../request-photos/request-photos.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
-import { Status_Flow } from '@prisma/client';
+import { jekRoles, Status_Flow } from '@prisma/client';
+import { RedisService, UserRedisState } from '../redis/redis.service';
 
 @Injectable()
 export class BotService {
@@ -18,9 +19,13 @@ export class BotService {
     private readonly configService: ConfigService,
     private readonly requestPhotosService: RequestPhotosService,
     private readonly addressesService: AddressesService,
+    private readonly redisService: RedisService,
     @InjectBot() private bot: Telegraf<Context>,
-  ) { }
+  ) {}
 
+  /**
+   * Foydalanuvchini bazadan qidirish (Faqat ma'lumot uchun)
+   */
   async getUserById(telegramId: bigint) {
     return this.prisma.users.findUnique({
       where: { telegram_id: telegramId },
@@ -28,56 +33,19 @@ export class BotService {
   }
 
   /**
-   * Foydalanuvchiga Telegram orqali xabar yuboradi
+   * Foydalanuvchi e'tiroz bildirganda (Reject) uni kutish holatiga o'tkazish
+   * Bu funksiya ACTION'dan chaqiriladi
    */
-  async sendNotification(telegramId: bigint, message: string) {
-    try {
-      await this.bot.telegram.sendMessage(Number(telegramId), message, {
-        parse_mode: 'HTML',
-      });
-      this.logger.log(`Notification sent to user ${telegramId}`);
-    } catch (error) {
-      this.logger.error(
-        `Error sending notification to user ${telegramId}:`,
-        error,
-      );
-    }
-  }
-
-  /**
-   * Foydalanuvchiga tugmalar bilan bildirishnoma yuboradi
-   */
-  async sendNotificationWithButtons(
-    telegramId: bigint,
-    message: string,
-    buttons: any,
-  ) {
-    try {
-      await this.bot.telegram.sendMessage(Number(telegramId), message, {
-        parse_mode: 'HTML',
-        reply_markup: buttons.reply_markup || buttons,
-      });
-      this.logger.log(`Notification with buttons sent to user ${telegramId}`);
-    } catch (error) {
-      this.logger.error(
-        `Error sending button-notification to user ${telegramId}:`,
-        error,
-      );
-    }
-  }
-
-  /**
-   * Ariza statusini o'zgartiradi
-   */
-  async updateRequestStatus(requestId: string, status: Status_Flow) {
-    return this.prisma.requests.update({
-      where: { id: requestId },
-      data: { status },
+  async prepareForRejection(telegramId: bigint, requestId: string) {
+    await this.updateUserData(telegramId, {
+      type: 'REQUEST',
+      step: 'REQ_REJECT_REASON', // E'tiroz sababini kutish bosqichi
+      metadata: { temp_reject_request_id: requestId },
     });
   }
 
   /**
-   * Foydalanuvchi e'tirozini qayta ishlaydi va arizani PENDING holatiga qaytaradi
+   * E'tiroz sababi yozilgandan keyin bazani yangilash
    */
   async processUserRejection(
     requestId: string,
@@ -89,17 +57,17 @@ export class BotService {
     });
     if (!request) throw new Error('Request not found');
 
-    // Arizani PENDING holatiga qaytarish va e'tiroz sababini note-ga yozish
+    // 1. Bazani yangilash
     await this.prisma.requests.update({
       where: { id: requestId },
       data: {
         status: 'REJECTED' as Status_Flow,
-        note: reason, // Foydalanuvchi e'tirozini note sifatida saqlash
-        rejection_reason: null, // Eski rad etish sababini o'chirib tashlash
+        note: reason,
+        rejection_reason: null,
       } as any,
     });
 
-    // Log yaratish
+    // 2. Log yaratish
     await this.prisma.requestStatusLog.create({
       data: {
         request_id: requestId,
@@ -110,100 +78,287 @@ export class BotService {
         note: reason,
       },
     });
+
+    // 3. Redis holatini tozalash (IDLE holatiga qaytarish)
+    await this.redisService.deleteUserState(BigInt(telegramId));
   }
 
   /**
-   * Foydalanuvchi arizani muvaffaqiyatli yakunlanganini tasdiqlaydi
+   * Bildirishnomalar yuborish (HTML va BigInt xatoliksiz)
    */
+  async sendNotification(telegramId: bigint, message: string) {
+    try {
+      await this.bot.telegram.sendMessage(Number(telegramId), message, {
+        parse_mode: 'HTML',
+      });
+    } catch (error) {
+      this.logger.error(`Error sending notification to ${telegramId}:`, error);
+    }
+  }
+
+  async sendNotificationWithButtons(
+    telegramId: bigint,
+    message: string,
+    buttons: any,
+  ) {
+    try {
+      // reply_markup obyektini to'g'ri yuborish
+      const markup = buttons.reply_markup ? buttons.reply_markup : buttons;
+      await this.bot.telegram.sendMessage(Number(telegramId), message, {
+        parse_mode: 'HTML',
+        reply_markup: markup,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error sending button-notification to ${telegramId}:`,
+        error,
+      );
+    }
+  }
+  async findOrCreateUser(telegramId: bigint) {
+    const user = await this.prisma.users.findUnique({
+      where: { telegram_id: telegramId },
+    });
+
+    let state = await this.redisService.getUserState(BigInt(telegramId));
+
+    if (!state) {
+      if (!user) {
+        // YANGI USER UCHUN: Faqat /start dan keyin REGISTRATION boshlanadi
+        state = {
+          type: 'REGISTRATION',
+          step: 'WAITING_NAME',
+          data: {},
+        };
+      } else {
+        // ESKI USER UCHUN: Shunchaki IDLE
+        state = {
+          type: 'IDLE',
+          step: 'NONE',
+          data: {},
+        };
+      }
+      await this.redisService.setUserState(BigInt(telegramId), state);
+    }
+
+    return { ...user, state };
+  }
+
+  async updateUserData(
+    telegramId: bigint,
+    data: Partial<UserRedisState> | any,
+  ) {
+    // 1. Telefon raqamini formatlash
+    if (data.phone) {
+      data.phone = data.phone.replace(/\D/g, '');
+      if (data.phone.length === 9) data.phone = `998${data.phone}`;
+    }
+
+    // 2. Redis-dagi holatni yangilash (Merge mantiqi)
+    if (data.type || data.step || data.data || data.metadata) {
+      const currentState = await this.redisService.getUserState(telegramId);
+
+      const newState = {
+        ...currentState,
+        ...data,
+        data: { ...(currentState?.data || {}), ...(data.data || {}) },
+        metadata: {
+          ...(currentState?.metadata || {}),
+          ...(data.metadata || {}),
+        },
+      } as UserRedisState;
+
+      await this.redisService.setUserState(telegramId, newState);
+      this.logger.log(
+        `User ${telegramId} Redis state updated: ${newState.step}`,
+      );
+    }
+
+    // 3. Prisma uchun ma'lumotlarni tayyorlash
+    const dbFields = ['full_name', 'phone', 'role', 'registration_step'];
+    const hasDbFields = Object.keys(data).some((key) => dbFields.includes(key));
+
+    if (hasDbFields) {
+      const prismaUpdate: any = {};
+      if (data.full_name) prismaUpdate.full_name = data.full_name;
+      if (data.phone) prismaUpdate.phoneNumber = data.phone;
+      if (data.role) prismaUpdate.role = data.role;
+      if (data.registration_step)
+        prismaUpdate.registration_step = data.registration_step;
+
+      // MUHIM: .update o'rniga .upsert ishlatamiz!
+      // Bu boyagi "Record not found" xatosini butunlay yo'qotadi.
+      return this.prisma.users.upsert({
+        where: { telegram_id: telegramId },
+        update: prismaUpdate,
+        create: {
+          telegram_id: telegramId,
+          full_name: data.full_name || null,
+          phoneNumber: data.phone || null,
+          role: data.role || jekRoles.User,
+          registration_step: data.registration_step || 'COMPLETED',
+        },
+      });
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Ariza raqamini generatsiya qilish (O'zgarmaydi, bazadagi songa tayanadi)
+   */
+  private async generateRequestNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const count = await this.prisma.requests.count({
+      where: { request_number: { startsWith: `JEK-${year}` } },
+    });
+    const sequence = String(count + 1).padStart(6, '0');
+    return `JEK-${year}-${sequence}`;
+  }
+
+  /**
+   * Redis-dagi vaqtinchalik ma'lumotlardan foydalanib bazada real ariza yaratish
+   */
+  async createRequestFromTemp(telegramId: bigint) {
+    // 1. Redis-dan barcha yig'ilgan ma'lumotlarni olamiz
+    const state = await this.redisService.getUserState(telegramId);
+
+    if (
+      !state ||
+      state.type !== 'REQUEST' ||
+      !state.data.district ||
+      !state.data.description
+    ) {
+      throw new Error('Ariza ma’lumotlari to‘liq emas (Redis)');
+    }
+
+    const { data } = state;
+
+    // 2. Bazadan foydalanuvchini topamiz
+    const user = await this.prisma.users.findUnique({
+      where: { telegram_id: BigInt(telegramId) },
+    });
+    if (!user) throw new Error('Foydalanuvchi bazadan topilmadi');
+
+    // 3. Manzilni tekshirish va bazadan ID olish
+    const addr = await this.addressesService.validateAndGetAddress({
+      district: data.district,
+      neighborhood: data.neighborhood,
+      building_number: data.building_number,
+      apartment_number: data.apartment_number
+        ? String(data.apartment_number)
+        : undefined,
+    });
+
+    const requestNumber = await this.generateRequestNumber();
+    const botToken = this.configService.get<string>('BOT_TOKEN');
+
+    // 4. Bazada ariza yaratish
+    const request = await this.prisma.requests.create({
+      data: {
+        request_number: requestNumber,
+        user_id: user.id,
+        address_id: addr.id,
+        description: data.description,
+        status: 'PENDING' as Status_Flow,
+      },
+    });
+
+    // 5. Rasmlarni yuklash (Redis-dagi file_id'lar orqali)
+    if (Array.isArray(data.photos) && data.photos.length > 0 && botToken) {
+      const photosToCreate: any[] = [];
+      for (const fileId of data.photos) {
+        try {
+          const localUrl = await this.mediaService.downloadFromTelegram(
+            fileId,
+            botToken,
+          );
+          photosToCreate.push({
+            file_url: localUrl,
+            telegram_file_id: fileId,
+          });
+        } catch (e) {
+          this.logger.error(`Error downloading photo ${fileId}:`, e);
+        }
+      }
+
+      if (photosToCreate.length > 0) {
+        await this.requestPhotosService.createMany(request.id, photosToCreate);
+      }
+    }
+
+    // 6. MUHIM: Bazada null qilib yurish shart emas!
+    // Shunchaki Redis-ni o'chiramiz.
+    // Keyingi safar foydalanuvchi ariza ochsa, Redis-da bo'sh ob'ekt yaratiladi.
+    await this.redisService.deleteUserState(telegramId);
+
+    // Agar foydalanuvchi IDLE holatiga o'tishi kerak bo'lsa:
+    await this.redisService.setUserState(telegramId, {
+      type: 'IDLE',
+      step: 'NONE',
+      data: {},
+    });
+
+    return request;
+  }
+
   async confirmRequest(requestId: string) {
     return this.prisma.requests.update({
       where: { id: requestId },
       data: {
         status: 'COMPLETED' as Status_Flow,
         completedAt: new Date(),
-      } as any,
+      },
     });
   }
 
-  async findOrCreateUser(telegramId: BigInt) {
-    let user: any = await this.prisma.users.findUnique({
-      where: { telegram_id: telegramId } as any,
-    });
-
-    if (!user) {
-      user = await this.prisma.users.create({
-        data: {
-          telegram_id: telegramId,
-          registration_step: 'FULL_NAME',
-        } as any,
-      });
-    }
-
-    if (!user.registration_step) {
-      user = await this.prisma.users.update({
-        where: { id: user.id },
-        data: { registration_step: 'FULL_NAME' } as any,
-      });
-    }
-
-    return user;
-  }
-
-  async updateUserData(telegramId: BigInt, data: any) {
-    if (data.phoneNumber) {
-      data.phoneNumber = data.phoneNumber.replace(/\D/g, '');
-      if (data.phoneNumber.length === 9)
-        data.phoneNumber = `998${data.phoneNumber}`;
-    }
-
-    const updated = await this.prisma.users.update({
-      where: { telegram_id: telegramId } as any,
-      data: data as any,
-    });
-
-    this.logger.log(
-      `User ${telegramId} data updated: registration_step -> ${updated.registration_step}`,
-    );
-    return updated;
-  }
-
-  async addTempPhoto(telegramId: bigint, fileId: string) {
-    return this.prisma.users.update({
-      where: { telegram_id: telegramId } as any,
-      data: {
-        temp_photos: {
-          push: fileId,
+  async getRequestById(requestId: string) {
+    return this.prisma.requests.findUnique({
+      where: { id: requestId },
+      include: {
+        requestPhotos: true, // Arizaga biriktirilgan rasmlar
+        address: true, // Tuman, mahalla, bino raqamlari
+        user: {
+          // Ariza egasining ma'lumotlari
+          select: {
+            full_name: true,
+            phoneNumber: true,
+            telegram_id: true,
+          },
         },
-      } as any,
+      },
     });
   }
 
   async getUserRequests(
-    telegramId: bigint,
+    telegramId: bigint, // BigInt emas, number qabul qilamiz
     page: number = 1,
     limit: number = 5,
   ) {
+    // 1. Avval foydalanuvchini bazadan topamiz (uning UUID id-si kerak)
     const user = await this.prisma.users.findUnique({
-      where: { telegram_id: telegramId } as any,
+      where: { telegram_id: telegramId },
     });
 
     if (!user) return { total: 0, requests: [], page: 1, totalPages: 0 };
 
     const skip = (page - 1) * limit;
 
+    // 2. Statuslarni massivga olamiz (faqat foydalanuvchi ko'rishi kerak bo'lganlari)
+    const activeStatuses: Status_Flow[] = [
+      'PENDING',
+      'IN_PROGRESS',
+      'JEK_COMPLETED',
+      'JEK_REJECTED',
+      'COMPLETED',
+    ];
+
+    // 3. Bir vaqtning o'zida ham ma'lumotlarni, ham umumiy sonini olamiz
     const [requests, total] = await Promise.all([
       this.prisma.requests.findMany({
         where: {
           user_id: user.id,
-          status: {
-            in: [
-              'PENDING',
-              'IN_PROGRESS',
-              'JEK_COMPLETED',
-              'JEK_REJECTED',
-              'COMPLETED',
-            ] as Status_Flow[],
-          },
+          status: { in: activeStatuses },
         },
         select: {
           id: true,
@@ -218,111 +373,46 @@ export class BotService {
       this.prisma.requests.count({
         where: {
           user_id: user.id,
-          status: {
-            in: [
-              'PENDING',
-              'IN_PROGRESS',
-              'JEK_COMPLETED',
-              'JEK_REJECTED',
-              'COMPLETED',
-            ] as Status_Flow[],
-          },
+          status: { in: activeStatuses },
         },
       }),
     ]);
 
-    return { total, requests, page, totalPages: Math.ceil(total / limit) };
+    return {
+      total,
+      requests,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  async getRequestById(requestId: string) {
-    return this.prisma.requests.findUnique({
-      where: { id: requestId },
-      include: {
-        requestPhotos: true,
-        address: true, // Manzilni ham olish
-      } as any,
-    });
-  }
+  /**
+   * Foydalanuvchi yuborgan rasmlarni Redis-dagi vaqtinchalik massivga yig'ish
+   */
+  async addTempPhoto(telegramId: bigint, fileId: string) {
+    // 1. Redis-dan joriy holatni olamiz
+    const state = await this.redisService.getUserState(telegramId);
 
-  async createRequestFromTemp(telegramId: bigint) {
-    const user: any = await this.prisma.users.findUnique({
-      where: { telegram_id: telegramId } as any,
-    });
+    // 2. Faqat ariza yaratish (REQUEST) jarayonida bo'lsa rasm qo'shamiz
+    if (state && state.type === 'REQUEST') {
+      // Agar massiv hali mavjud bo'lmasa, bo'sh massiv yaratamiz
+      const currentPhotos = state.data.photos || [];
 
-    if (
-      !user ||
-      !user.temp_district ||
-      !user.temp_mahalla ||
-      !user.temp_description
-    ) {
-      throw new Error('Incomplete data for request');
+      // Yangi rasm ID-sini qo'shamiz
+      currentPhotos.push(fileId);
+
+      // 3. Yangilangan holatni Redis-ga qayta yozamiz
+      await this.redisService.setUserState(telegramId, {
+        ...state,
+        data: {
+          ...state.data,
+          photos: currentPhotos,
+        },
+      });
+
+      this.logger.log(
+        `Photo added to Redis for user ${telegramId}. Total: ${currentPhotos.length}`,
+      );
     }
-
-    const addr = await this.addressesService.validateAndGetAddress({
-      district: user.temp_district,
-      neighborhood: user.temp_mahalla,
-      building_number: user.temp_building_number,
-      apartment_number: user.temp_apartment_number,
-    });
-
-    const requestNumber = await this.generateRequestNumber();
-    const botToken = this.configService.get<string>('BOT_TOKEN');
-
-    const request = await this.prisma.requests.create({
-      data: {
-        request_number: requestNumber,
-        user_id: user.id,
-        address_id: addr.id,
-        description: user.temp_description,
-        status: 'PENDING' as Status_Flow,
-        latitude: user.latitude, // Agar bo'lsa
-        longitude: user.longitude, // Agar bo'lsa
-      } as any,
-    });
-
-    // ... rasm yuklash qismi qoladi ...
-
-    if (Array.isArray(user.temp_photos) && botToken) {
-      const photosToCreate: any[] = [];
-      for (const fileId of user.temp_photos) {
-        try {
-          const localUrl = await this.mediaService.downloadFromTelegram(
-            fileId,
-            botToken,
-          );
-          photosToCreate.push({ file_url: localUrl, telegram_file_id: fileId });
-        } catch (e) {
-          this.logger.error(`Error downloading photo ${fileId}:`, e);
-        }
-      }
-      if (photosToCreate.length > 0) {
-        await this.requestPhotosService.createMany(request.id, photosToCreate);
-      }
-    }
-
-    await this.prisma.users.update({
-      where: { telegram_id: telegramId } as any,
-      data: {
-        registration_step: 'COMPLETED',
-        temp_district: null,
-        temp_mahalla: null,
-        temp_building_number: null,
-        temp_apartment_number: null,
-        temp_address: null,
-        temp_description: null,
-        temp_photos: [],
-      } as any,
-    });
-
-    return request;
-  }
-
-  private async generateRequestNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const count = await this.prisma.requests.count({
-      where: { request_number: { startsWith: `JEK-${year}` } },
-    });
-    const sequence = String(count + 1).padStart(6, '0');
-    return `JEK-${year}-${sequence}`;
   }
 }

@@ -3,6 +3,7 @@ import { Context, Markup } from 'telegraf';
 import { BotService } from './bot.service';
 import { Logger } from '@nestjs/common';
 import { BotFlowService } from './bot-flow.service';
+import { RedisService } from '../redis/redis.service';
 
 @Update()
 export class BotUpdate {
@@ -11,133 +12,138 @@ export class BotUpdate {
   constructor(
     private readonly botService: BotService,
     private readonly botFlowService: BotFlowService,
-  ) { }
+    private readonly redisService: RedisService,
+  ) {}
 
   @Start()
   async onStart(ctx: Context) {
     if (!ctx.from) return;
-    try {
-      let user: any = await this.botService.findOrCreateUser(
-        BigInt(ctx.from.id),
-      );
+    const userId = BigInt(ctx.from.id);
 
-      // Agar foydalanuvchi ariza yaratish bosqichida bo'lsa, barchasini reset qilish va menyuni ko'rsatish
-      if (user.registration_step && user.registration_step.startsWith('REQ_')) {
-        user = await this.botService.updateUserData(BigInt(ctx.from.id), {
-          registration_step: 'COMPLETED',
-          temp_district: null,
-          temp_mahalla: null,
-          temp_building_number: null,
-          temp_apartment_number: null,
-          temp_address: null,
-          temp_description: null,
-          temp_photos: [],
-          temp_reject_request_id: null,
+    try {
+      const userWithState = await this.botService.findOrCreateUser(userId);
+      const { state } = userWithState;
+
+      // 1. Agar foydalanuvchi REQUEST (ariza) jarayonida bo'lsa - Reset qilamiz
+      if (state.type === 'REQUEST') {
+        await this.botService.updateUserData(userId, {
+          type: 'IDLE',
+          step: 'NONE',
+          data: {},
+          metadata: { temp_view_message_ids: [] },
         });
+
         await ctx.reply(
-          'Saytga xush kelibsiz! Jarayon yangilandi. / Добро пожаловать! Процесс обновлен.',
-        );
-        await ctx.reply(
-          'Quyidagi menyudan birini tanlang: / Выберите один из пунктов меню:',
+          'Jarayon yangilandi. / Процесс обновлен.',
           this.botFlowService.mainMenu(),
         );
         return;
       }
 
-      if (user.registration_step !== 'COMPLETED') {
-        await ctx.reply('Saytga xush kelibsiz! / Добро пожаловать!');
-        await this.handleStep(ctx, String(user.registration_step));
-      } else {
-        await ctx.reply(
-          'Saytga xush kelibsiz! Quyidagi menyudan birini tanlang: / Добро пожаловать! Выберите один из пунктов меню:',
-          this.botFlowService.mainMenu(),
-        );
+      // 2. Registratsiyadan o'tmagan bo'lsa (Bazada yo'q)
+      if (!('id' in userWithState)) {
+        await ctx.reply('Xush kelibsiz! / Добро пожаловать!');
+        // handleStep funksiyasiga Redis step'ni uzatamiz
+        await this.handleStep(ctx, state.step);
+        return;
       }
-      return;
+
+      // 3. To'liq ro'yxatdan o'tgan bo'lsa
+      await ctx.reply(
+        'Xush kelibsiz! Quyidagi menyudan birini tanlang:',
+        this.botFlowService.mainMenu(),
+      );
     } catch (error) {
       this.logger.error('Error in onStart:', error);
-      await ctx.reply(
-        "Xatolik yuz berdi. /start buyrug'ini bering. / Произошла ошибка. Введите команду /start.",
-      );
-      return;
+      await ctx.reply("Xatolik yuz berdi. /start buyrug'ini qayta bering.");
     }
   }
 
   @Action(/^dist_/)
   async onDistrictSelect(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
+
     try {
       const district = (ctx.callbackQuery as any).data.replace('dist_', '');
-      await this.botService.updateUserData(BigInt(ctx.from.id), {
-        temp_district: district,
-        registration_step: 'REQ_MAHALLA',
+
+      // Redis state'ni yangilaymiz
+      await this.botService.updateUserData(userId, {
+        type: 'REQUEST',
+        step: 'REQ_MAHALLA',
+        data: { district }, // Ma'lumot 'data' ichiga ketadi
       });
+
       await ctx.answerCbQuery();
       await ctx.editMessageText(
         `Tanlangan hudud / Выбранный район: ${district}\n\nEndi mahalla nomini tanlang: / Теперь выберите махаллю:`,
         this.botFlowService.mahallaMenu(district),
       );
-      return;
     } catch (error) {
       this.logger.error('Error in onDistrictSelect:', error);
-      return;
     }
   }
 
   @Action(/^mhl_/)
   async onMahallaSelect(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
+
     try {
       const mahalla = (ctx.callbackQuery as any).data.replace('mhl_', '');
-      await this.botService.updateUserData(BigInt(ctx.from.id), {
-        temp_mahalla: mahalla,
-        registration_step: 'REQ_BUILDING',
+
+      // Redis state'ni yangilaymiz
+      await this.botService.updateUserData(userId, {
+        type: 'REQUEST',
+        step: 'REQ_BUILDING',
+        data: { neighborhood: mahalla }, // neighborhood (mahalla) data ichiga
       });
+
       await ctx.answerCbQuery();
       await ctx.editMessageText(
         `Tanlangan mahalla / Выбранная махалля: ${mahalla}`,
       );
+
       await ctx.reply(
         'Bino raqamini (uy raqami) kiriting: / Введите номер дома:',
         Markup.keyboard([['❌ Bekor qilish / Отмена']])
           .oneTime()
           .resize(),
       );
-      return;
     } catch (error) {
       this.logger.error('Error in onMahallaSelect:', error);
-      return;
     }
   }
 
   @Action(/^user_confirm_req_/)
   async onConfirmRequest(ctx: Context) {
     if (!ctx.from || !ctx.chat || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
 
     try {
-      // 1. Telegramdan IDni ajratib olamiz
       const requestId = (ctx.callbackQuery as any).data.split('_')[3];
 
-      // 2. Darhol javob beramiz (soat aylanib turmasligi uchun)
-      await ctx.answerCbQuery('Tasdiqlandi! / Подтверждено!').catch(() => { });
+      await ctx.answerCbQuery('Tasdiqlandi! / Подтверждено!').catch(() => {});
 
-      // 3. Bazada statusni yangilaymiz
+      // 1. Bazada arizani yopamiz
       await this.botService.confirmRequest(requestId);
 
-      // 4. Avvalgi ko'rilgan xabarlarni (rasmlar va info) tozalaymiz
-      const user = await this.botService.getUserById(BigInt(ctx.from.id));
-      if (user && user.temp_view_message_ids) {
-        for (const msgId of user.temp_view_message_ids as string[]) {
+      // 2. Redis'dan vaqtinchalik xabarlar ID-larini olib o'chirib chiqamiz
+      const state = await this.redisService.getUserState(userId);
+      if (state?.metadata?.temp_view_message_ids) {
+        for (const msgId of state.metadata.temp_view_message_ids) {
           await ctx.telegram
             .deleteMessage(ctx.chat.id, parseInt(msgId))
-            .catch(() => { });
+            .catch(() => {});
         }
       }
 
-      // 5. User stepini tozalaymiz va xabar yuboramiz
-      await this.botService.updateUserData(BigInt(ctx.from.id), {
-        temp_view_message_ids: [],
-        registration_step: 'COMPLETED',
+      // 3. Redis holatini IDLE (bo'sh) holatiga o'tkazamiz va xabarlarni tozalaymiz
+      await this.botService.updateUserData(userId, {
+        type: 'IDLE',
+        step: 'NONE',
+        data: {},
+        metadata: { temp_view_message_ids: [] },
       });
 
       await ctx.reply(
@@ -153,17 +159,19 @@ export class BotUpdate {
   @Action(/^requests_page_/)
   async onPageChange(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
+
     try {
-      const user: any = await this.botService.findOrCreateUser(
-        BigInt(ctx.from.id),
-      );
-      // Ko'rilgan ariza xabarlarini tozalash (agar bo'lsa)
-      if (user.temp_view_message_ids && user.temp_view_message_ids.length > 0) {
-        for (const msgId of user.temp_view_message_ids) {
-          await ctx.deleteMessage(parseInt(msgId)).catch(() => { });
+      const state = await this.redisService.getUserState(userId);
+
+      // Ko'rilgan ariza xabarlarini Redis metadata orqali tozalash
+      if (state?.metadata?.temp_view_message_ids?.length > 0) {
+        for (const msgId of state.metadata.temp_view_message_ids) {
+          await ctx.deleteMessage(parseInt(msgId)).catch(() => {});
         }
-        await this.botService.updateUserData(BigInt(ctx.from.id), {
-          temp_view_message_ids: [],
+        // Xabarlar ro'yxatini tozalaymiz
+        await this.botService.updateUserData(userId, {
+          metadata: { temp_view_message_ids: [] },
         });
       }
 
@@ -171,35 +179,38 @@ export class BotUpdate {
         parseInt(
           (ctx.callbackQuery as any).data.replace('requests_page_', ''),
         ) || 1;
-      await this.listRequests(ctx, page, false); // isEdit=false chunki hamma narsani o'chirdik
+
+      // Sahifani listRequests orqali chiqaramiz
+      await this.listRequests(ctx, page, false);
       await ctx.answerCbQuery();
-      return;
     } catch (error) {
       this.logger.error('Error onPageChange:', error);
-      return;
     }
   }
 
   @Action(/^view_req_/)
   async onViewRequest(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
 
     try {
       const data = (ctx.callbackQuery as any).data.split('_');
       const reqId = data[2];
       const page = data[4] || '1';
 
-      const req: any = await this.botService.getRequestById(reqId);
+      const req = await this.botService.getRequestById(reqId);
       if (!req) {
         await ctx.answerCbQuery('Ariza topilmadi.');
         return;
       }
 
-      // 1. Avvalgi xabarlarni tozalash (agar bo'lsa)
-      await ctx.deleteMessage().catch(() => { });
+      // 1. Joriy bosilgan tugmali xabarni o'chirish
+      await ctx.deleteMessage().catch(() => {});
 
       const addr = req.address;
-      const fullAddr = `${addr.district}, ${addr.neighborhood} ${addr.building_number ? ', ' + addr.building_number + '-bino' : ''}${addr.apartment_number ? ', ' + addr.apartment_number + '-xonadon' : ''}`;
+      const fullAddr = `${addr.district}, ${addr.neighborhood} ${
+        addr.building_number ? ', ' + addr.building_number + '-bino' : ''
+      }${addr.apartment_number ? ', ' + addr.apartment_number + '-xonadon' : ''}`;
 
       let message = `📄 <b>Ariza #${req.request_number}</b>\n\n`;
       message += `📍 Hudud: ${addr.district}\n`;
@@ -221,23 +232,21 @@ export class BotUpdate {
           ),
         ]);
       }
-      // Muhim: Ortga qaytish tugmasi endi maxsus action'ga boradi
       buttons.push([
         Markup.button.callback("⬅️ Ro'yxatga qaytish", `back_to_list_${page}`),
       ]);
 
-      const keyboard = Markup.inlineKeyboard(buttons);
       const sentIds: string[] = [];
       const path = require('path');
-      const photos = req.requestPhotos || [];
+      const photos = (req as any).requestPhotos || [];
 
-      // 2. AVVAL RASMLARNI YUBORISH
+      // 2. Rasmlarni yuborish
       if (photos.length > 0) {
         if (photos.length > 1) {
           const mediaGroup: any[] = photos.slice(0, 10).map((p) => {
             const absolutePath = path.join(
               process.cwd(),
-              p.file_url.startsWith('/') ? p.file_url.substring(1) : p.file_url,
+              p.file_url.replace(/^\//, ''),
             );
             return { type: 'photo', media: { source: absolutePath } };
           });
@@ -246,25 +255,23 @@ export class BotUpdate {
         } else {
           const absolutePath = path.join(
             process.cwd(),
-            photos[0].file_url.startsWith('/')
-              ? photos[0].file_url.substring(1)
-              : photos[0].file_url,
+            photos[0].file_url.replace(/^\//, ''),
           );
           const msg = await ctx.replyWithPhoto({ source: absolutePath });
           sentIds.push(msg.message_id.toString());
         }
       }
 
-      // 3. KEYIN MA'LUMOTLARNI YUBORISH
+      // 3. Ma'lumotlarni yuborish
       const infoMsg = await ctx.reply(message, {
         parse_mode: 'HTML',
-        ...keyboard,
+        ...Markup.inlineKeyboard(buttons),
       });
       sentIds.push(infoMsg.message_id.toString());
 
-      // 4. Barcha yuborilgan xabarlar ID-sini saqlash
-      await this.botService.updateUserData(BigInt(ctx.from.id), {
-        temp_view_message_ids: sentIds,
+      // 4. Barcha yuborilgan xabarlar ID-sini Redis metadata-ga yozish
+      await this.botService.updateUserData(userId, {
+        metadata: { temp_view_message_ids: sentIds },
       });
 
       await ctx.answerCbQuery();
@@ -276,27 +283,29 @@ export class BotUpdate {
   @Action(/^user_reject_req_/)
   async onRejectRequest(ctx: Context) {
     if (!ctx.from || !ctx.chat || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
 
     try {
-      const user = await this.botService.getUserById(BigInt(ctx.from.id));
-
-      if (user && user.temp_view_message_ids) {
-        for (const msgId of user.temp_view_message_ids as string[]) {
-          // Endi TypeScript ctx.chat.id dan qo'rqmaydi
+      // 1. Redis-dan xabarlar tarixini olib tozalaymiz
+      const state = await this.redisService.getUserState(userId);
+      if (state?.metadata?.temp_view_message_ids) {
+        for (const msgId of state.metadata.temp_view_message_ids) {
           await ctx.telegram
             .deleteMessage(ctx.chat.id, parseInt(msgId))
-            .catch(() => { });
+            .catch(() => {});
         }
       }
 
       const reqId = (ctx.callbackQuery as any).data.split('_')[3];
 
-      // 2. Foydalanuvchi holatini (step) o'zgartirish
-      // Bu yerda foydalanuvchiga rad etish sababini yozishini so'raymiz
-      await this.botService.updateUserData(BigInt(ctx.from.id), {
-        registration_step: 'REQ_USER_REJECTION_REASON',
-        temp_reject_request_id: reqId, // Qaysi arizani rad etayotganini saqlab qo'yamiz
-        temp_view_message_ids: [],
+      // 2. Redis holatini e'tiroz sababini kutish bosqichiga o'tkazamiz
+      await this.botService.updateUserData(userId, {
+        type: 'REQUEST',
+        step: 'REQ_REJECT_REASON', // UserRedisState-dagi step nomi
+        metadata: {
+          temp_reject_request_id: reqId,
+          temp_view_message_ids: [], // Tozalanganini qayd etamiz
+        },
       });
 
       await ctx.reply("❌ Iltimos, e'tirozingiz sababini yozib yuboring:");
@@ -308,40 +317,30 @@ export class BotUpdate {
 
   @Action(/^back_to_list_/)
   async onBackToList(ctx: Context) {
-    // Chat va User borligini tekshiramiz
     if (!ctx.from || !ctx.chat || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
 
     try {
       const data = (ctx.callbackQuery as any).data.split('_');
       const page = data[3] || '1';
 
-      // 1. Foydalanuvchini olamiz (IDlarni bilish uchun)
-      const user = await this.botService.getUserById(BigInt(ctx.from.id));
-
-      // 2. Ko'rilgan ariza xabarlarini va rasmlarni tozalaymiz
-      if (
-        user &&
-        user.temp_view_message_ids &&
-        user.temp_view_message_ids.length > 0
-      ) {
-        for (const msgId of user.temp_view_message_ids as string[]) {
-          // ctx.chat.id dan foydalanamiz, chunki bu xavfsizroq
+      // 1. Redis-dan vaqtinchalik xabarlar ID-larini olib tozalaymiz
+      const state = await this.redisService.getUserState(userId);
+      if (state?.metadata?.temp_view_message_ids?.length > 0) {
+        for (const msgId of state.metadata.temp_view_message_ids) {
           await ctx.telegram
             .deleteMessage(ctx.chat.id, parseInt(msgId))
-            .catch(() => { });
+            .catch(() => {});
         }
 
-        // Bazadagi IDlarni tozalaymiz
-        await this.botService.updateUserData(BigInt(ctx.from.id), {
-          temp_view_message_ids: [],
+        // Redis-dagi ID-larni tozalaymiz
+        await this.botService.updateUserData(userId, {
+          metadata: { ...state.metadata, temp_view_message_ids: [] },
         });
       }
 
-      // 3. Callback ma'lumotini "aldab" o'zgartiramiz
-      // Bu orqali onPageChange funksiyasi qaysi sahifaga qaytishni bilib oladi
+      // 2. Callback ma'lumotini o'zgartirib sahifaga yo'naltiramiz
       (ctx.update as any).callback_query.data = `requests_page_${page}`;
-
-      // 4. Sening ro'yxat chiqaruvchi funksiyangni chaqiramiz
       await this.onPageChange(ctx);
 
       await ctx.answerCbQuery();
@@ -350,40 +349,41 @@ export class BotUpdate {
       await ctx.answerCbQuery('Xatolik yuz berdi.');
     }
   }
+
   @Action(/^show_photos_/)
   async onShowPhotos(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
+    const userId = BigInt(ctx.from.id);
+
     try {
       const reqId = (ctx.callbackQuery as any).data.replace('show_photos_', '');
-      const req: any = await this.botService.getRequestById(reqId);
+      const req = await this.botService.getRequestById(reqId);
+
       if (!req || !req.requestPhotos || req.requestPhotos.length === 0) {
         await ctx.answerCbQuery('Rasmlar topilmadi / Фото не найдены.');
         return;
       }
 
+      const path = require('path');
       const mediaGroup: any[] = req.requestPhotos.map((p: any) => ({
         type: 'photo',
         media: {
-          source: require('path').join(
-            process.cwd(),
-            p.file_url.startsWith('/') ? p.file_url.substring(1) : p.file_url,
-          ),
+          source: path.join(process.cwd(), p.file_url.replace(/^\//, '')),
         },
       }));
 
       const msgs = await ctx.replyWithMediaGroup(mediaGroup);
 
-      // Yuborilgan rasmlarni ham o'chiriladiganlar ro'yxatiga qo'shish
-      const user: any = await this.botService.findOrCreateUser(
-        BigInt(ctx.from.id),
-      );
-      const currentIds = user.temp_view_message_ids || [];
+      // 3. Yangi yuborilgan rasmlarni Redis metadata-ga qo'shish
+      const state = await this.redisService.getUserState(userId);
+      const currentIds = state?.metadata?.temp_view_message_ids || [];
       const newIds = [
         ...currentIds,
         ...msgs.map((m) => m.message_id.toString()),
       ];
-      await this.botService.updateUserData(BigInt(ctx.from.id), {
-        temp_view_message_ids: newIds,
+
+      await this.botService.updateUserData(userId, {
+        metadata: { ...state?.metadata, temp_view_message_ids: newIds },
       });
 
       await ctx.answerCbQuery();
@@ -391,29 +391,37 @@ export class BotUpdate {
       this.logger.error('Error onShowPhotos:', error);
     }
   }
-
   @On('message')
   async onMessage(ctx: Context) {
     if (!ctx.from) return;
-    try {
-      const user: any = await this.botService.findOrCreateUser(
-        BigInt(ctx.from.id),
-      );
-      const message = ctx.message as any;
-      const text = message.text;
+    const userId = BigInt(ctx.from.id);
+    // const { state } = userWithState;
+    const message = ctx.message as any;
+    const text = message.text;
 
+    try {
+      const state = await this.redisService.getUserState(BigInt(userId));
+
+      // 2. MUHIM: Agar state umuman yo'q bo'lsa (user /start bosmagan)
+      if (!state) {
+        // Agar yozgan matni /start bo'lmasa, uni to'xtatamiz
+        if (text !== '/start') {
+          await ctx.reply(
+            "Botdan foydalanish uchun avval /start buyrug'ini bering. / Для использования бота сначала введите команду /start.",
+          );
+          return;
+        }
+        // Agar /start bo'lsa, onStart handle qiladi, shuning uchun bu yerda return qilamiz
+        return;
+      }
+
+      // 1. Foydalanuvchi va uning Redis state-ini olamiz
+      const userWithState = await this.botService.findOrCreateUser(userId);
+
+      // 2. Bekor qilish mantiqi (Redis-ni bir marta tozalash kifoya)
       if (text === '❌ Bekor qilish / Отмена' || text === '❌ Bekor qilish') {
-        await this.botService.updateUserData(BigInt(ctx.from.id), {
-          registration_step: 'COMPLETED',
-          temp_district: null,
-          temp_mahalla: null,
-          temp_building_number: null,
-          temp_apartment_number: null,
-          temp_address: null,
-          temp_description: null,
-          temp_photos: [],
-          temp_reject_request_id: null,
-        });
+        await this.redisService.deleteUserState(userId);
+
         await ctx.reply(
           'Jarayon bekor qilindi. / Процесс отменен.',
           this.botFlowService.mainMenu(),
@@ -421,24 +429,26 @@ export class BotUpdate {
         return;
       }
 
-      // E'tiroz sababini qabul qilish
-      if (user.registration_step === 'REQ_USER_REJECTION_REASON') {
+      // 3. E'tiroz sababini qabul qilish (Redis-dagi REQ_REJECT_REASON bosqichi)
+      if (state.step === 'REQ_REJECT_REASON') {
         if (!text) {
           await ctx.reply(
-            "Iltimos, e'tiroz sababini matn ko'rinishida yozing. / Пожалуйста, напишите причину спора текстом:",
+            "Iltimos, e'tiroz sababini matn ko'rinishida yozing.",
           );
           return;
         }
-        const requestId = user.temp_reject_request_id;
-        await this.botService.processUserRejection(
-          requestId,
-          text,
-          BigInt(ctx.from.id),
-        );
-        await this.botService.updateUserData(BigInt(ctx.from.id), {
-          registration_step: 'COMPLETED',
-          temp_reject_request_id: null,
-        });
+
+        const requestId = state.metadata?.temp_reject_request_id;
+        if (!requestId) {
+          await this.redisService.deleteUserState(userId);
+          return ctx.reply(
+            "Xatolik: Ariza ID topilmadi. Qaytadan urinib ko'ring.",
+          );
+        }
+
+        await this.botService.processUserRejection(requestId, text, userId);
+
+        // Jarayon bitgach Redis IDLE holatiga qaytadi (processUserRejection ichida o'chiriladi)
         await ctx.reply(
           "E'tirozingiz qabul qilindi. / Ваш спор принят.",
           this.botFlowService.mainMenu(),
@@ -446,56 +456,57 @@ export class BotUpdate {
         return;
       }
 
-      // Asosiy menyu amallari
-      if (user.registration_step === 'COMPLETED') {
-        if (
-          text === '✍️ Ariza yaratish / Создать заявку' ||
-          text === '✍️ Ariza yaratish'
-        ) {
-          await this.botService.updateUserData(BigInt(ctx.from.id), {
-            registration_step: 'REQ_DISTRICT',
+      // 4. Asosiy menyu amallari (IDLE yoki COMPLETED holatda)
+      if (state.type === 'IDLE') {
+        if (text?.includes('✍️ Ariza yaratish')) {
+          await this.botService.updateUserData(userId, {
+            type: 'REQUEST',
+            step: 'REQ_DISTRICT',
+            data: {},
           });
+
           await ctx.reply(
             'Iltimos, hududni tanlang: / Пожалуйста, выберите район:',
             this.botFlowService.districtMenu(),
           );
           return;
-        } else if (
-          text === '📋 Mening arizalarim / Мои заявки' ||
-          text === '📋 Mening arizalarim'
-        ) {
+        }
+
+        if (text?.includes('📋 Mening arizalarim')) {
           await this.listRequests(ctx, 1);
-          return;
-        } else {
-          await ctx.reply(
-            'Iltimos, quyidagi menyudan foydalaning: / Пожалуйста, используйте меню ниже:',
-            this.botFlowService.mainMenu(),
-          );
           return;
         }
       }
 
-      // O'tish bosqichlari
-      if (
-        ['FULL_NAME', 'FIRST_NAME', 'LAST_NAME', 'PHONE_NUMBER'].includes(
-          user.registration_step,
-        )
-      ) {
-        await this.botFlowService.handleRegistration(ctx, user, message);
+      // 5. Registratsiya oqimi (REGISTRATION)
+      if (state.type === 'REGISTRATION') {
+        // userWithState ob'ektini handleRegistration-ga uzatamiz
+        await this.botFlowService.handleRegistration(
+          ctx,
+          userWithState,
+          message,
+        );
         return;
       }
 
-      if (user.registration_step && user.registration_step.startsWith('REQ_')) {
-        await this.botFlowService.handleRequestFlow(ctx, user, message);
+      // 6. Ariza yaratish oqimi (REQUEST)
+      if (state.type === 'REQUEST') {
+        await this.botFlowService.handleRequestFlow(
+          ctx,
+          userWithState,
+          message,
+        );
         return;
       }
-      return;
+
+      // Agar hech qaysi holat tushmasa - menyuni ko'rsatish
+      await ctx.reply(
+        'Iltimos, quyidagi menyudan foydalaning:',
+        this.botFlowService.mainMenu(),
+      );
     } catch (error) {
       this.logger.error('Error in onMessage:', error);
-      await ctx.reply(
-        'Texnik nosozlik. Iltimos, kuting... / Техническая ошибка. Пожалуйста, подождите...',
-      );
-      return;
+      await ctx.reply('Texnik nosozlik. Iltimos, kuting...');
     }
   }
 
@@ -555,7 +566,7 @@ export class BotUpdate {
       } catch (e) {
         // Agar tahrirlash imkonsiz bo'lsa (masalan, rasm xabar bo'lsa), yangi xabar yuboramiz
         await ctx.reply(message, { parse_mode: 'HTML', ...keyboard });
-        await ctx.deleteMessage().catch(() => { }); // Eski xabarni o'chirib tashlaymiz
+        await ctx.deleteMessage().catch(() => {}); // Eski xabarni o'chirib tashlaymiz
       }
     } else {
       await ctx.reply(message, { parse_mode: 'HTML', ...keyboard });
@@ -563,40 +574,49 @@ export class BotUpdate {
   }
 
   async handleStep(ctx: Context, step: string) {
+    const userId = BigInt(ctx.from!.id);
+
     switch (step) {
-      case 'FULL_NAME':
-      case 'FIRST_NAME':
+      // 1. Registratsiya qismi (Nomlarni interfeysga mosladik)
+      case 'WAITING_NAME': // FULL_NAME o'rniga
         await ctx.reply('Ism-sharifingizni kiriting: / Введите ваше ФИО:');
         break;
-      case 'PHONE_NUMBER':
+
+      case 'WAITING_PHONE': // PHONE_NUMBER o'rniga
         await ctx.reply(
           'Telefon raqamingizni yuboring: / Отправьте ваш номер телефона:',
           Markup.keyboard([
             [
               Markup.button.contactRequest(
-                '📞 Kontakni yuborish / Отправить контакт',
+                '📞 Kontakni yuborish / Отправить kontakt',
               ),
             ],
+            ['❌ Bekor qilish / Отмена'],
           ])
             .oneTime()
             .resize(),
         );
         break;
+
+      // 2. Ariza yaratish qismi
       case 'REQ_DISTRICT':
         await ctx.reply(
           'Hududni tanlang: / Выберите район:',
           this.botFlowService.districtMenu(),
         );
         break;
+
       case 'REQ_MAHALLA':
-        const u: any = await this.botService.findOrCreateUser(
-          BigInt(ctx.from!.id),
-        );
+        // Redis'dan user ma'lumotlarini olamiz (u yerda district bor)
+        const userState = await this.botService.findOrCreateUser(userId);
+        const district = userState.state.data.district;
+
         await ctx.reply(
           'Mahalla nomini tanlang: / Выберите махаллю:',
-          this.botFlowService.mahallaMenu(u.temp_district),
+          this.botFlowService.mahallaMenu(district),
         );
         break;
+
       case 'REQ_BUILDING':
         await ctx.reply(
           'Bino raqamini (uy raqami) kiriting: / Введите номер дома:',
@@ -605,6 +625,7 @@ export class BotUpdate {
             .resize(),
         );
         break;
+
       case 'REQ_APARTMENT':
         await ctx.reply(
           'Xonadon raqamini kiriting: / Введите номер квартиры:',
@@ -613,6 +634,7 @@ export class BotUpdate {
             .resize(),
         );
         break;
+
       case 'REQ_DESCRIPTION':
         await ctx.reply(
           'Muammo tavsifini yozing: / Опишите проблему:',
@@ -621,6 +643,7 @@ export class BotUpdate {
             .resize(),
         );
         break;
+
       case 'REQ_PHOTO':
         await ctx.reply(
           'Muammoni tasdiqlovchi rasm(lar) yuboring: / Отправьте фото:',
@@ -632,9 +655,11 @@ export class BotUpdate {
             .resize(),
         );
         break;
+
       case 'REQ_CONFIRM':
-        await this.botFlowService.showConfirmationSummary(ctx);
+        await this.botFlowService.showConfirmationSummary(ctx, userId);
         break;
+
       default:
         await ctx.reply(
           'Menyudan foydalaning: / Используйте меню:',

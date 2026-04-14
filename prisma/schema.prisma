@@ -12,7 +12,7 @@ enum jekRoles {
   JEK
   Admin
   INSPECTION
-  Government
+  GOVERNMENT
 }
 
 // Ariza holatlari
@@ -37,15 +37,15 @@ model Users {
   registration_step String?  @default("START") // START, FULL_NAME, PHONE_NUMBER, COMPLETED, REQ_DISTRICT, REQ_ADDRESS, REQ_DESCRIPTION, REQ_PHOTO, REQ_CONFIRM
 
   // Vaqtinchalik ariza ma'lumotlari
-  temp_district          String?
-  temp_mahalla           String?
-  temp_building_number   String?
-  temp_apartment_number  String?
-  temp_address           String?
-  temp_description       String?
-  temp_photos            String[] @default([]) // Bir nechta rasmlar uchun file_id massivi
-  temp_view_message_ids  String[] @default([]) // Ko'rilayotgan ariza bilan bog'liq xabarlar ID-lari
-  temp_reject_request_id String? // E'tiroz bildirilayotgan ariza ID-si
+  // temp_district          String?
+  // temp_mahalla           String?
+  // temp_building_number   String?
+  // temp_apartment_number  String?
+  // temp_address           String?
+  // temp_description       String?
+  // temp_photos            String[] @default([]) // Bir nechta rasmlar uchun file_id massivi
+  // temp_view_message_ids  String[] @default([]) // Ko'rilayotgan ariza bilan bog'liq xabarlar ID-lari
+  // temp_reject_request_id String? // E'tiroz bildirilayotgan ariza ID-si
 
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
