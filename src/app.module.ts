@@ -20,9 +20,21 @@ import { RedisModule } from '@nestjs-modules/ioredis';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    RedisModule.forRoot({
-      type: 'single',
-      url: 'redis://localhost:6379', // Parol bo'lsa: redis://:password@host:port
+    RedisModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const host = configService.get<string>('REDIS_HOST', 'localhost');
+        const port = configService.get<number>('REDIS_PORT', 6379);
+        const password = configService.get<string>('REDIS_PASSWORD');
+
+        return {
+          type: 'single',
+          url: password
+            ? `redis://:${password}@${host}:${port}`
+            : `redis://${host}:${port}`,
+        };
+      },
     }),
     JwtModule.registerAsync({
       global: true,
