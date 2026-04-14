@@ -5,6 +5,7 @@ import { BotUpdate } from './bot.update';
 import { BotService } from './bot.service';
 import { BotFlowService } from './bot-flow.service';
 import { AddressesModule } from '../addresses/addresses.module';
+import { RedisModule } from '../redis/redis.module';
 
 @Global()
 @Module({
@@ -16,6 +17,7 @@ import { AddressesModule } from '../addresses/addresses.module';
                 token: config.get<string>('BOT_TOKEN')!,
             }),
         }),
+        RedisModule
     ],
     providers: [BotUpdate, BotService, BotFlowService],
     exports: [BotService, BotFlowService],

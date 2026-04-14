@@ -237,15 +237,19 @@ export class RequestsService {
       this.prisma.requests.count({ where } as any),
     ]);
 
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
     return {
       data: requests,
       meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        total, // Jami arizalar soni
+        page: Number(page), // Joriy sahifa
+        limit: Number(limit), // Bir sahifadagi limit
+        totalPages, // Jami sahifalar soni (Frontend uchun asosiysi)
+        hasNextPage: page < totalPages, // Keyingi sahifa bormi?
+        hasPreviousPage: page > 1, // Oldingi sahifa bormi?
       },
-    };
+    };;
   }
 
   async assign(requestId: string, jekId: string) {

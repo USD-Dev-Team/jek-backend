@@ -11,6 +11,7 @@ import { MediaModule } from './modules/media/media.module';
 import { RequestPhotosModule } from './modules/request-photos/request-photos.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { StatisticsModule } from './modules/statistics/statistics.module';
+import { RedisModule } from '@nestjs-modules/ioredis';
 
 @Module({
   imports: [
@@ -18,6 +19,10 @@ import { StatisticsModule } from './modules/statistics/statistics.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+    RedisModule.forRoot({
+      type: 'single',
+      url: 'redis://localhost:6379', // Parol bo'lsa: redis://:password@host:port
     }),
     JwtModule.registerAsync({
       global: true,
@@ -41,4 +46,4 @@ import { StatisticsModule } from './modules/statistics/statistics.module';
   controllers: [],
   providers: [],
 })
-export class AppModule { }
+export class AppModule {}

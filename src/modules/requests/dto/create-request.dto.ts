@@ -127,12 +127,12 @@ export class UniversalFilterDto {
   @IsOptional()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Qidiruv maydoni' })
+  @ApiPropertyOptional({ description: 'Page maydoni' })
   @IsOptional()
   @Type(() => Number)
   page?: number;
 
-  @ApiPropertyOptional({ description: 'Qidiruv maydoni' })
+  @ApiPropertyOptional({ description: 'Limit maydoni' })
   @IsOptional()
   @Type(() => Number)
   limit?: number;

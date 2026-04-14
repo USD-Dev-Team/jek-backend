@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'Admin', 'INSPECTION', 'Government');
+CREATE TYPE "jekRoles" AS ENUM ('User', 'JEK', 'Admin', 'INSPECTION', 'GOVERNMENT');
 
 -- CreateEnum
 CREATE TYPE "Status_Flow" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'JEK_COMPLETED', 'REJECTED', 'JEK_REJECTED');
@@ -12,14 +12,6 @@ CREATE TABLE "users" (
     "phoneNumber" TEXT,
     "role" "jekRoles" NOT NULL DEFAULT 'User',
     "registration_step" TEXT DEFAULT 'START',
-    "temp_district" TEXT,
-    "temp_mahalla" TEXT,
-    "temp_building_number" TEXT,
-    "temp_apartment_number" TEXT,
-    "temp_address" TEXT,
-    "temp_description" TEXT,
-    "temp_photos" JSONB,
-    "temp_reject_request_id" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

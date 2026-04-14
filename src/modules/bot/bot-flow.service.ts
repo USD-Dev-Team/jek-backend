@@ -27,26 +27,35 @@ export class BotFlowService {
   /**
    * Foydalanuvchini ro'yxatdan o'tkazish (FULL_NAME, PHONE_NUMBER)
    */
-  async handleRegistration(ctx: Context, user: any, message: any) {
+  /**
+   * Foydalanuvchini ro'yxatdan o'tkazish (WAITING_NAME, WAITING_PHONE)
+   * user: { state: UserRedisState, id?: string, ... } ko'rinishida keladi
+   */
+  async handleRegistration(ctx: Context, userWithState: any, message: any) {
     const text = message.text;
     const userId = BigInt(ctx.from!.id);
-    const currentStep = user.registration_step;
+    const { state } = userWithState;
 
     this.logger.log(
-      `User ${userId} registration step: ${currentStep}, text: ${text}`,
+      `User ${userId} registration step: ${state.step}, text: ${text}`,
     );
 
-    if (currentStep === 'FULL_NAME' || currentStep === 'FIRST_NAME') {
+    // 1. Ism sharifni qabul qilish
+    if (state.step === 'WAITING_NAME') {
       if (!text) {
         await ctx.reply(
           "Iltimos, ism-sharifingizni matn ko'rinishida yuboring. / Пожалуйста, введите ваше ФИО.",
         );
         return;
       }
+
+      // Redis-da ismni saqlaymiz va stepni o'zgartiramiz
       await this.botService.updateUserData(userId, {
-        full_name: text,
-        registration_step: 'PHONE_NUMBER',
+        type: 'REGISTRATION',
+        step: 'WAITING_PHONE',
+        data: { full_name: text },
       });
+
       await ctx.reply(
         'Rahmat! Endi telefon raqamingizni yuboring: / Спасибо! Теперь отправьте ваш номер телефона:',
         Markup.keyboard([
@@ -63,22 +72,32 @@ export class BotFlowService {
       return;
     }
 
-    if (currentStep === 'PHONE_NUMBER') {
+    // 2. Telefon raqamini qabul qilish va yakunlash
+    if (state.step === 'WAITING_PHONE') {
       let phone = message.contact
         ? message.contact.phone_number
         : text && /^(?:\+?998)?\d{9}$/.test(text.replace(/\s/g, ''))
           ? text.replace(/\s/g, '')
           : null;
+
       if (!phone) {
         await ctx.reply(
-          'Iltimos, telefon raqamingizni yuboring yoki "📞 Kontakni yuborish" tugmasini bosing. / Пожалуйста, отправьте номер телефона или нажмите кнопку "Отправить контакт".',
+          'Iltimos, telefon raqamingizni to‘g‘ri formatda yuboring yoki tugmani bosing.',
         );
         return;
       }
+
+      // FINAL: Bazaga (PostgreSQL) hamma ma'lumotni bir yo'la saqlaymiz
       await this.botService.updateUserData(userId, {
-        phoneNumber: phone,
-        registration_step: 'COMPLETED',
+        full_name: state.data.full_name, // Redis-dan olingan ism
+        phone: phone, // Hozir kelgan telefon
+        // Baza yangilangach, updateUserData ichida Redis-ni tozalash mantiqi bo'lishi kerak
+        // yoki bu yerda qo'lda IDLE ga o'tkazamiz:
+        type: 'IDLE',
+        step: 'NONE',
+        data: {},
       });
+
       await ctx.reply(
         "Muvaffaqiyatli ro'yxatdan o'tdingiz! ✅ / Вы успешно зарегистрировались! ✅",
         this.mainMenu(),
@@ -90,11 +109,15 @@ export class BotFlowService {
   /**
    * Ariza yaratish jarayoni
    */
-  async handleRequestFlow(ctx: Context, user: any, message: any) {
+  async handleRequestFlow(ctx: Context, userWithState: any, message: any) {
     const text = message.text;
     const userId = BigInt(ctx.from!.id);
+    const { state } = userWithState;
 
-    switch (user.registration_step) {
+    // В Redis мы храним данные в state.data (тип RequestData)
+    const currentData = state.data;
+
+    switch (state.step) {
       case 'REQ_DISTRICT':
         await ctx.reply(
           'Iltimos, tepadagi tugmalardan hududni tanlang: / Пожалуйста, выберите район из кнопок выше:',
@@ -104,10 +127,10 @@ export class BotFlowService {
 
       case 'REQ_MAHALLA':
         if (text === '❌ Bekor qilish / Отмена') return;
-        const userData: any = await this.botService.findOrCreateUser(userId);
+        // Данные о районе уже лежат в Redis (из Action onDistrictSelect)
         await ctx.reply(
           'Iltimos, yuqoridagi tugmalardan mahallani tanlang: / Пожалуйста, выберите махаллю из кнопок выше:',
-          this.mahallaMenu(userData.temp_district),
+          this.mahallaMenu(currentData.district),
         );
         return;
 
@@ -119,9 +142,11 @@ export class BotFlowService {
           );
           return;
         }
+        // Сохраняем номер дома в Redis
         await this.botService.updateUserData(userId, {
-          temp_building_number: text,
-          registration_step: 'REQ_APARTMENT',
+          type: 'REQUEST',
+          step: 'REQ_APARTMENT',
+          data: { ...currentData, building_number: text },
         });
         await ctx.reply('Xonadon raqamini kiriting: / Введите номер квартиры:');
         return;
@@ -134,11 +159,11 @@ export class BotFlowService {
           );
           return;
         }
-        const fullAddress = `${user.temp_mahalla} m., ${user.temp_building_number}-bino / дом, ${text}-xonadon / кв`;
+        // Сохраняем номер квартиры в Redis
         await this.botService.updateUserData(userId, {
-          temp_apartment_number: text,
-          temp_address: fullAddress,
-          registration_step: 'REQ_DESCRIPTION',
+          type: 'REQUEST',
+          step: 'REQ_DESCRIPTION',
+          data: { ...currentData, apartment_number: text },
         });
         await ctx.reply(
           "Muammoni qisqacha tavsiflab bering (matn ko'rinishida): / Кратко опишите проблему (текстом):",
@@ -148,14 +173,14 @@ export class BotFlowService {
       case 'REQ_DESCRIPTION':
         if (text === '❌ Bekor qilish / Отмена') return;
         if (!text) {
-          await ctx.reply(
-            'Iltimos, muammo tavsifini yozib yuboring. / Пожалуйста, отправьте описание проблемы.',
-          );
+          await ctx.reply('Iltimos, muammo tavsifini yozib yuboring.');
           return;
         }
+        // Сохраняем описание в Redis
         await this.botService.updateUserData(userId, {
-          temp_description: text,
-          registration_step: 'REQ_PHOTO',
+          type: 'REQUEST',
+          step: 'REQ_PHOTO',
+          data: { ...currentData, description: text },
         });
         await ctx.reply(
           'Muammoni tasdiqlovchi rasm(lar) yuboring: / Отправьте фото, подтверждающие проблему:',
@@ -169,88 +194,50 @@ export class BotFlowService {
         return;
 
       case 'REQ_PHOTO':
+        // Логика пропуска фото или завершения загрузки
         if (
           text &&
           (text.includes('Rasmsiz davom etish') ||
-            text.includes('Продолжить без фото'))
+            text.includes('Tayyor / Готово'))
         ) {
           await this.botService.updateUserData(userId, {
-            registration_step: 'REQ_CONFIRM',
+            type: 'REQUEST',
+            step: 'REQ_CONFIRM',
+            data: currentData,
           });
-          await this.showConfirmationSummary(ctx);
+          await this.showConfirmationSummary(ctx, userId); // Передаем userId для получения данных из Redis
           return;
         }
 
-        if (text === '✅ Tayyor / Готово') {
-          if (!user.temp_photos || (user.temp_photos as any[]).length === 0) {
-            await ctx.reply(
-              'Iltimos, kamida bitta rasm yuboring yoki "📸 Rasmsiz davom etish" tugmasini bosing. / Пожалуйста, отправьте хотя бы одно фото или нажмите кнопку "Продолжить без фото".',
-            );
-            return;
-          }
-          await this.botService.updateUserData(userId, {
-            registration_step: 'REQ_CONFIRM',
-          });
-          await this.showConfirmationSummary(ctx);
-          return;
-        }
-
+        // Обработка фото (метод addTempPhoto мы уже адаптировали под Redis)
         if (message.photo) {
-          const photos = message.photo;
-          const fileId = photos[photos.length - 1].file_id;
+          const fileId = message.photo[message.photo.length - 1].file_id;
           await this.botService.addTempPhoto(userId, fileId);
 
+          // Показываем кнопку "Готово" после первого фото
           if (
             !message.media_group_id ||
-            ((user.temp_photos as any[]) || []).length % 5 === 0
+            (currentData.photos?.length || 0) % 3 === 0
           ) {
             await ctx.reply(
-              `📸 Rasm qo'shildi. Yana rasm yuboring yoki quyidagilardan birini tanlang: / Фото добавлено. Отправьте еще фото или выберите один из вариантов:`,
+              `📸 Rasm qo'shildi. Yana yuborasizmi?`,
               Markup.keyboard([
                 ['✅ Tayyor / Готово'],
                 ['❌ Bekor qilish / Отмена'],
-              ])
-                .oneTime()
-                .resize(),
+              ]).resize(),
             );
           }
           return;
-        }
-        if (text !== '❌ Bekor qilish / Отмена') {
-          await ctx.reply(
-            'Iltimos, rasm yuboring yoki "✅ Tayyor" tugmasini bosing. / Пожалуйста, отправьте фото или нажмите кнопку "Готово".',
-          );
         }
         return;
 
       case 'REQ_CONFIRM':
-        if (
-          text === '✅ Tasdiqlash / Подтвердить' ||
-          text === '✅ Tayyor / Готово' ||
-          text === '✅ Tasdiqlash'
-        ) {
+        if (text?.includes('Tasdiqlash') || text?.includes('Подтвердить')) {
+          // Вызываем метод, который возьмет ВСЁ из Redis и создаст одну запись в PostgreSQL
           await this.botService.createRequestFromTemp(userId);
+
           await ctx.reply(
-            "Arizangiz muvaffaqiyatli yuborildi! JEK xodimlari tez orada ko'rib chiqishadi. / Ваша заявка успешно отправлена! Сотрудники ЖЭК рассмотрят ее в ближайшее время.",
-            this.mainMenu(),
-          );
-          return;
-        } else if (
-          text === '❌ Bekor qilish / Отмена' ||
-          text === '❌ Bekor qilish'
-        ) {
-          await this.botService.updateUserData(userId, {
-            registration_step: 'COMPLETED',
-            temp_district: null,
-            temp_mahalla: null,
-            temp_building_number: null,
-            temp_apartment_number: null,
-            temp_address: null,
-            temp_description: null,
-            temp_photos: null,
-          });
-          await ctx.reply(
-            'Jarayon bekor qildi. / Процесс отменен.',
+            'Arizangiz muvaffaqiyatli yuborildi! / Ваша заявка успешно отправлена!',
             this.mainMenu(),
           );
           return;
@@ -258,15 +245,31 @@ export class BotFlowService {
         return;
     }
   }
+  /**
+   * Ariza yakunida barcha ma'lumotlarni ko'rsatish
+   */
+  async showConfirmationSummary(ctx: Context, userId: bigint) {
+    // Redis-dan joriy holatni olamiz
+    const userWithState = await this.botService.findOrCreateUser(userId);
+    const { state } = userWithState;
 
-  async showConfirmationSummary(ctx: Context) {
-    const latestUser: any = await this.botService.findOrCreateUser(
-      BigInt(ctx.from!.id),
-    );
-    const photoCount = Array.isArray(latestUser.temp_photos)
-      ? latestUser.temp_photos.length
-      : 0;
-    const summary = `📄 <b>Murojaatni tasdiqlaysizmi? / Подтверждаете ли вы обращение?</b>\n\n📍 Hudud / Район: ${latestUser.temp_district}\n🏠 Manzil / Адрес: ${latestUser.temp_address}\n📝 Muammo / Проблема: ${latestUser.temp_description}\n📸 Rasmlar soni / Кол-во фото: ${photoCount} ta / шт`;
+    if (state.type !== 'REQUEST') return;
+
+    const data = state.data;
+    const photoCount = Array.isArray(data.photos) ? data.photos.length : 0;
+
+    // Manzilni chiroyli ko'rinishga keltiramiz
+    const fullAddress = `${data.neighborhood} m., ${data.building_number}-bino${
+      data.apartment_number ? ', ' + data.apartment_number + '-xonadon' : ''
+    }`;
+
+    const summary =
+      `📄 <b>Murojaatni tasdiqlaysizmi? / Подтверждаете ли вы обращение?</b>\n\n` +
+      `📍 Hudud / Район: ${data.district}\n` +
+      `🏠 Manzil / Адрес: ${fullAddress}\n` +
+      `📝 Muammo / Проблема: ${data.description}\n` +
+      `📸 Rasmlar soni / Кол-во фото: ${photoCount} ta / шт`;
+
     await ctx.reply(summary, {
       parse_mode: 'HTML',
       ...Markup.keyboard([
@@ -277,6 +280,9 @@ export class BotFlowService {
     });
   }
 
+  /**
+   * Asosiy menyu (O'zgarmadi, lekin scannable qilindi)
+   */
   mainMenu() {
     return Markup.keyboard([
       ['✍️ Ariza yaratish / Создать заявку'],
@@ -284,14 +290,20 @@ export class BotFlowService {
     ]).resize();
   }
 
+  /**
+   * Tumanlar menyusi
+   */
   districtMenu() {
-    const districts = this.mahallaData.addresses;
+    const districts = this.mahallaData.addresses || [];
     const buttons = districts.map((d) =>
       Markup.button.callback(d, `dist_${d}`),
     );
     return Markup.inlineKeyboard(buttons, { columns: 2 });
   }
 
+  /**
+   * Mahallalar menyusi
+   */
   mahallaMenu(districtName: string) {
     const mahallas = this.mahallaData.mahallas[districtName] || [];
     const buttons = mahallas.map((m: string) =>

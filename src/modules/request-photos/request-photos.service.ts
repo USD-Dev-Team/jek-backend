@@ -14,7 +14,7 @@ export class RequestPhotosService {
             })) as any,
         });
     }
-
+ 
     async findByRequestId(requestId: string) {
         return this.prisma.requestPhoto.findMany({
             where: { request_id: requestId },
