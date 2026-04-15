@@ -8,6 +8,9 @@ import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { jekRoles, Status_Flow } from '@prisma/client';
 import { RedisService, UserRedisState } from '../redis/redis.service';
+import { InputMediaPhoto } from 'telegraf/types'; // Типни импорт қилинг
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 @Injectable()
 export class BotService {
@@ -61,7 +64,7 @@ export class BotService {
     await this.prisma.requests.update({
       where: { id: requestId },
       data: {
-        status: 'REJECTED' as Status_Flow,
+        status: 'IN_PROGRESS' as Status_Flow,
         note: reason,
         rejection_reason: null,
       } as any,
@@ -72,7 +75,7 @@ export class BotService {
       data: {
         request_id: requestId,
         old_status: request.status,
-        new_status: 'REJECTED',
+        new_status: 'IN_PROGRESS',
         changed_by_role: 'USER',
         changed_by_id: String(telegramId),
         note: reason,
@@ -413,6 +416,32 @@ export class BotService {
       this.logger.log(
         `Photo added to Redis for user ${telegramId}. Total: ${currentPhotos.length}`,
       );
+    }
+  }
+
+  async sendAlbum(chatId: bigint, photoPaths: string[]) {
+    try {
+      const mediaGroup = photoPaths
+        .filter((p) => p && !p.includes('undefined')) // Undefined'larni chiqarib tashlaymiz
+        .map((p) => {
+          // Agar p '/uploads/...' bilan boshlansa, uni to'liq yo'lga aylantiramiz
+          const absolutePath = join(process.cwd(), p);
+
+          if (existsSync(absolutePath)) {
+            return {
+              type: 'photo',
+              media: { source: absolutePath }, // URL emas, faylning o'zi!
+            };
+          }
+          return null;
+        })
+        .filter((item) => item !== null);
+
+      if (mediaGroup.length > 0) {
+        await this.bot.telegram.sendMediaGroup(`${chatId}`, mediaGroup as any);
+      }
+    } catch (error) {
+      this.logger.error('Album yuborishda xato:', error);
     }
   }
 }
