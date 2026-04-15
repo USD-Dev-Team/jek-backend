@@ -66,12 +66,17 @@ export class RequestsService {
   }
 
   async getUniversalRequests(filter: UniversalFilterDto) {
+    // 1. Default қийматларни бериш ва рақамга ўтказиш
+    const page = Number(filter.page) || 1;
+    const limit = Number(filter.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const { startDate, endDate, district, neighborhood, status, search } =
       filter;
 
     const where: any = {};
 
-    // 1. Vaqt bo'yicha filtr
+    // Vaqt bo'yicha filtr
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) {
@@ -86,60 +91,81 @@ export class RequestsService {
       }
     }
 
-    // 2. Oddiy string maydonlar
     if (status) where.status = status;
 
-    // 3. Address jadvali bo'yicha ichki filtr (Relation)
-    // Query-da kelgan stringlarni kerakli turga o'giramiz
     if (district || neighborhood) {
       where.address = {
-        ...(district && { district: district }),
-        ...(neighborhood && { neighborhood: neighborhood }),
+        ...(district && {
+          district: { contains: district, mode: 'insensitive' },
+        }),
+        ...(neighborhood && {
+          neighborhood: { contains: neighborhood, mode: 'insensitive' },
+        }),
       };
     }
 
-    // 3. Global Search mantiqi
+    // Global Search mantiqi
     if (search) {
       const searchCondition = { contains: search, mode: 'insensitive' as any };
-
       where.OR = [
-        // 1. Ariza raqami bo'yicha (masalan: REQ-1001)
         { request_number: searchCondition },
-
-        // 2. Tuman nomi bo'yicha (Address bog'liqligi orqali)
-        {
-          user: {
-            full_name: searchCondition,
-          },
-        },
-
-        // 3. Mahalla nomi bo'yicha (Address bog'liqligi orqali)
-        {
-          user: {
-            phoneNumber: searchCondition,
-          },
-        },
+        { assigned_jek_id : searchCondition},
+        { user: { full_name: searchCondition } },
+        { user: { phoneNumber: searchCondition } },
       ];
     }
 
-    const skip =
-      (filter.page ? filter.page : 1 - 1) * (filter.limit ? filter.limit : 5);
-    return this.prisma.requests.findMany({
-      where,
-      include: {
-        address: true,
-        requestPhotos: true,
-        user: {
-          select: {
-            full_name: true,
-            phoneNumber: true,
+    const [requests, total] = await Promise.all([
+      this.prisma.requests.findMany({
+        where,
+        select: {
+          id: true,
+          request_number: true,
+          description: true,
+          assigned_jek:true,
+          status: true,
+          createdAt: true,
+          address: {
+            select: {
+              district: true,
+              neighborhood: true,
+              building_number: true,
+              apartment_number: true,
+            },
+          },
+          requestPhotos: {
+            select: {
+              id: true,
+              file_url: true,
+            },
+          },
+          user: {
+            select: {
+              full_name: true,
+              phoneNumber: true,
+            },
           },
         },
+        orderBy: { createdAt: 'desc' },
+        skip: skip, 
+        take: limit,
+      }),
+      this.prisma.requests.count({ where }),
+    ]);
+
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+    return {
+      data: requests,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
       },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: filter.limit ? filter.limit : 5,
-    });
+    };
   }
 
   async findJekRequests(
@@ -249,7 +275,7 @@ export class RequestsService {
         hasNextPage: page < totalPages, // Keyingi sahifa bormi?
         hasPreviousPage: page > 1, // Oldingi sahifa bormi?
       },
-    };;
+    };
   }
 
   async assign(requestId: string, jekId: string) {

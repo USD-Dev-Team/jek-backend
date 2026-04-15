@@ -1,46 +1,21 @@
-import { Controller, Get, UseGuards, Req, HttpException, HttpStatus } from '@nestjs/common';
-import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { StatisticsService } from './statistics.service';
-import { TokenGuard } from 'src/common/guards/token.guard';
-import { RoleGuard } from 'src/common/guards/role.guard';
-import { Roles } from 'src/common/decorators/role';
-import { jekRoles } from '@prisma/client';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { GeneralStatisticsDto } from './dto/statistics.dto';
 
 @ApiTags('Statistics')
-@ApiBearerAuth()
 @Controller('statistics')
-@UseGuards(TokenGuard, RoleGuard)
+// @UseGuards(JwtAuthGuard, RolesGuard) // Admin ekanini tekshirish uchun guardlar
 export class StatisticsController {
-  constructor(
-    private readonly statisticsService: StatisticsService,
-  ) {}
+  constructor(private readonly statisticsService: StatisticsService) {}
 
-  @Get('my-performance')
-  @Roles(jekRoles.JEK)
+  @Get('general')
   @ApiOperation({
-    summary: "JEK xodimi uchun o'z faoliyati statistikasi",
-    description:
-      "Xodimga biriktirilgan hududlardagi jami arizalar va statuslar bo'yicha bo'linishi.",
+    summary: 'Dashboard uchun barcha statistik ma’lumotlarni olish',
   })
-  async getMyPerformance(@Req() req: any) {
-    const jekId = req.user.id;
-    return await this.statisticsService.getMyPerformance(jekId);
-  }
-
-  @Get('statistics/general')
-  @Roles(jekRoles.JEK,jekRoles.INSPECTION,jekRoles.GOVERNMENT) // Faqat adminlar ko'ra oladi
-  async getStats() {
-    try {
-      const stats = await this.statisticsService.getGeneralStatistics();
-      return {
-        success: true,
-        data: stats,
-      };
-    } catch (error) {
-      throw new HttpException(
-        'Statistikani yuklashda xatolik',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+  @ApiResponse({ status: 200, description: 'Muvaffaqiyatli qaytarildi' })
+  async getGeneralStats(@Query() query: GeneralStatisticsDto) {
+    // query ichidan year, district, adminId, neighborhood keladi
+    return this.statisticsService.getDashboardData(query);
   }
 }

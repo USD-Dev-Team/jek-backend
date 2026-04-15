@@ -214,40 +214,41 @@ export class AdminsService {
       neighborhood,
       phoneNumber,
       isActive,
+      role,
+      page = 1, // DTO'ga qo'shgan paginatsiyamiz
+      limit = 10,
     } = dto;
 
-    // 1. Dinamik filtr ob'ekti
+    const skip = (Number(page) - 1) * Number(limit);
     const where: any = {};
 
-    // 2. Ism bo'yicha qidiruv
+    // 1. Ism va Familiya (String maydonlar)
     if (first_name) {
-      where.first_name = {
-        contains: first_name,
-        mode: 'insensitive',
-      };
+      where.first_name = { contains: first_name, mode: 'insensitive' };
     }
-
-    // 3. Familiya bo'yicha qidiruv
     if (last_name) {
-      where.last_name = {
-        contains: last_name,
-        mode: 'insensitive',
-      };
+      where.last_name = { contains: last_name, mode: 'insensitive' };
     }
 
-    // 4. Telefon raqami (faqat raqamlarni solishtiramiz)
+    // 2. Role (Enum - MUHIM: contains ishlamaydi!)
+    if (role) {
+      where.role = role; // Enum to'g'ridan-to'g'ri tenglik bilan tekshiriladi
+    }
+
+    // 3. Telefon
     if (phoneNumber) {
       where.phoneNumber = {
         contains: phoneNumber.replace(/\D/g, ''),
       };
     }
 
-    // 5. Faollik holati (Stringdan Boolean'ga o'tkazamiz)
+    // 4. isActive (Boolean)
+    // DTO'da Transform ishlatganimiz uchun bu yerda to'g'ridan-to'g'ri boolean keladi
     if (isActive !== undefined) {
-      where.isActive = String(isActive) === 'true';
+      where.isActive = isActive;
     }
 
-    // 6. Hududiy qidiruv (Admin_addresses -> address bog'liqligi orqali)
+    // 5. Hududiy qidiruv
     if (district || neighborhood) {
       where.addresses = {
         some: {
@@ -263,7 +264,7 @@ export class AdminsService {
       };
     }
 
-    // 7. Bazadan qidirish
+    // 6. Bazadan qidirish (Paginatsiya bilan)
     const [staff, total] = await Promise.all([
       this.prisma.admins.findMany({
         where,
@@ -273,14 +274,23 @@ export class AdminsService {
           },
         },
         orderBy: { first_name: 'asc' },
+        skip,
+        take: Number(limit),
       }),
       this.prisma.admins.count({ where }),
     ]);
 
+    const totalPages = Math.ceil(total / Number(limit));
+
     return {
       success: true,
-      total,
       data: staff,
+      meta: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages,
+      },
     };
   }
 }

@@ -6,8 +6,14 @@ import {
   IsNotEmpty,
   Matches,
   IsArray,
+  IsEnum,
+  IsInt,
+  Min,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { jekRoles } from '@prisma/client';
+import { Transform } from 'class-transformer';
 
 export class UpdateAdminDto {
   @ApiProperty({ default: 'Alisher' })
@@ -48,18 +54,12 @@ export class updateStatusDto {
 }
 
 export class UniversalStaffSearch {
-  @ApiPropertyOptional({
-    description: 'Ismi',
-    example: 'Ali',
-  })
+  @ApiPropertyOptional({ description: 'Ismi', example: 'Ali' })
   @IsOptional()
   @IsString()
   first_name?: string;
 
-  @ApiPropertyOptional({
-    description: 'Familyasi',
-    example: 'Valiyev',
-  })
+  @ApiPropertyOptional({ description: 'Familyasi', example: 'Valiyev' })
   @IsOptional()
   @IsString()
   last_name?: string;
@@ -89,10 +89,32 @@ export class UniversalStaffSearch {
   phoneNumber?: string;
 
   @ApiPropertyOptional({
-    description: 'Ariza holati',
-    example: true,
+    description: 'Hodim roli',
+    enum: jekRoles,
+    example: jekRoles.JEK,
   })
   @IsOptional()
-  @IsString()
+  @IsEnum(jekRoles)
+  role?: jekRoles;
+
+  @ApiPropertyOptional({ description: 'Xodim faolligi', example: true })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true) // Query'dan kelganda stringni boolean qiladi
+  @IsBoolean()
   isActive?: boolean;
+
+  // PAGINATSIYA UCHUN QO'SHILDI
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ default: 10 })
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  limit?: number = 10;
 }

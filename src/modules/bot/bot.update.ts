@@ -58,7 +58,6 @@ export class BotUpdate {
       await ctx.reply("Xatolik yuz berdi. /start buyrug'ini qayta bering.");
     }
   }
-
   @Action(/^dist_/)
   async onDistrictSelect(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
@@ -67,16 +66,22 @@ export class BotUpdate {
     try {
       const district = (ctx.callbackQuery as any).data.replace('dist_', '');
 
-      // Redis state'ni yangilaymiz
       await this.botService.updateUserData(userId, {
         type: 'REQUEST',
         step: 'REQ_MAHALLA',
-        data: { district }, // Ma'lumot 'data' ichiga ketadi
+        data: { district },
       });
 
       await ctx.answerCbQuery();
+
+      // Inline menyuni tahrirlab qo'yamiz
       await ctx.editMessageText(
-        `Tanlangan hudud / Выбранный район: ${district}\n\nEndi mahalla nomini tanlang: / Теперь выберите махаллю:`,
+        `Tanlangan hudud / Выбранный район: ${district}`,
+      );
+
+      // Faqat mahallalar menyusini yuboramiz, boshqa ortiqcha gap-so'zsiz
+      await ctx.reply(
+        'Mahalla nomini tanlang: / Выберите махаллю:',
         this.botFlowService.mahallaMenu(district),
       );
     } catch (error) {
@@ -391,36 +396,50 @@ export class BotUpdate {
       this.logger.error('Error onShowPhotos:', error);
     }
   }
+
   @On('message')
   async onMessage(ctx: Context) {
     if (!ctx.from) return;
     const userId = BigInt(ctx.from.id);
-    // const { state } = userWithState;
     const message = ctx.message as any;
     const text = message.text;
 
     try {
-      const state = await this.redisService.getUserState(BigInt(userId));
+      // 1. Redis-dan holatni olamiz
+      let state = await this.redisService.getUserState(userId);
 
-      // 2. MUHIM: Agar state umuman yo'q bo'lsa (user /start bosmagan)
+      // 2. MUHIM: Agar Redis-da state bo'lmasa, bazani tekshiramiz
       if (!state) {
-        // Agar yozgan matni /start bo'lmasa, uni to'xtatamiz
-        if (text !== '/start') {
-          await ctx.reply(
-            "Botdan foydalanish uchun avval /start buyrug'ini bering. / Для использования бота сначала введите команду /start.",
-          );
-          return;
+        const dbUser = await this.botService.findOrCreateUser(userId);
+
+        if (dbUser && dbUser.registration_step === 'COMPLETED') {
+          // Agar bazada bor bo'lsa, Redis state-ni IDLE qilib tiklaymiz
+          state = { type: 'IDLE', step: 'NONE', data: {} };
+          await this.redisService.setUserState(userId, state);
+        } else {
+          // Haqiqatdan ham yo'q bo'lsa, start so'raymiz
+          if (text !== '/start') {
+            await ctx.reply(
+              "Botdan foydalanish uchun avval /start buyrug'ini bering.",
+              Markup.removeKeyboard(), // Eski tugmalarni o'chirib tashlaymiz
+            );
+            return;
+          }
+          return; // /start bo'lsa onStart metodiga o'tib ketadi
         }
-        // Agar /start bo'lsa, onStart handle qiladi, shuning uchun bu yerda return qilamiz
-        return;
       }
 
-      // 1. Foydalanuvchi va uning Redis state-ini olamiz
+      // 3. Foydalanuvchi ma'lumotlarini olamiz
       const userWithState = await this.botService.findOrCreateUser(userId);
 
-      // 2. Bekor qilish mantiqi (Redis-ni bir marta tozalash kifoya)
+      // 4. Bekor qilish mantiqi (Siz so'ragan asosiy qism)
       if (text === '❌ Bekor qilish / Отмена' || text === '❌ Bekor qilish') {
-        await this.redisService.deleteUserState(userId);
+        // REQUEST yoki REGISTRATION jarayonini to'xtatib, IDLE holatga o'tkazamiz
+        await this.redisService.setUserState(userId, {
+          type: 'IDLE',
+          step: 'NONE',
+          data: {},
+        });
 
         await ctx.reply(
           'Jarayon bekor qilindi. / Процесс отменен.',
@@ -429,7 +448,7 @@ export class BotUpdate {
         return;
       }
 
-      // 3. E'tiroz sababini qabul qilish (Redis-dagi REQ_REJECT_REASON bosqichi)
+      // 5. E'tiroz sababini qabul qilish
       if (state.step === 'REQ_REJECT_REASON') {
         if (!text) {
           await ctx.reply(
@@ -437,27 +456,19 @@ export class BotUpdate {
           );
           return;
         }
-
         const requestId = state.metadata?.temp_reject_request_id;
-        if (!requestId) {
-          await this.redisService.deleteUserState(userId);
-          return ctx.reply(
-            "Xatolik: Ariza ID topilmadi. Qaytadan urinib ko'ring.",
-          );
-        }
-
         await this.botService.processUserRejection(requestId, text, userId);
-
-        // Jarayon bitgach Redis IDLE holatiga qaytadi (processUserRejection ichida o'chiriladi)
         await ctx.reply(
-          "E'tirozingiz qabul qilindi. / Ваш спор принят.",
+          "E'tirozingiz qabul qilindi.",
           this.botFlowService.mainMenu(),
         );
         return;
       }
 
-      // 4. Asosiy menyu amallari (IDLE yoki COMPLETED holatda)
+      // 6. Asosiy menyu amallari (IDLE holatda)
       if (state.type === 'IDLE') {
+        // bot.update.ts ichida
+
         if (text?.includes('✍️ Ariza yaratish')) {
           await this.botService.updateUserData(userId, {
             type: 'REQUEST',
@@ -465,6 +476,13 @@ export class BotUpdate {
             data: {},
           });
 
+          // 1. Avval pastki (Reply) menyuda "Bekor qilish"ni chiqaramiz
+          await ctx.reply(
+            'Ariza yaratish jarayoni boshlandi. / Процесс создания заявки начат.',
+            Markup.keyboard([['❌ Bekor qilish / Отмена']]).resize(),
+          );
+
+          // 2. Keyin hududlarni (Inline) tanlashni so'raymiz
           await ctx.reply(
             'Iltimos, hududni tanlang: / Пожалуйста, выберите район:',
             this.botFlowService.districtMenu(),
@@ -478,9 +496,8 @@ export class BotUpdate {
         }
       }
 
-      // 5. Registratsiya oqimi (REGISTRATION)
+      // 7. Oqimlarni boshqarish
       if (state.type === 'REGISTRATION') {
-        // userWithState ob'ektini handleRegistration-ga uzatamiz
         await this.botFlowService.handleRegistration(
           ctx,
           userWithState,
@@ -489,7 +506,6 @@ export class BotUpdate {
         return;
       }
 
-      // 6. Ariza yaratish oqimi (REQUEST)
       if (state.type === 'REQUEST') {
         await this.botFlowService.handleRequestFlow(
           ctx,
@@ -499,17 +515,16 @@ export class BotUpdate {
         return;
       }
 
-      // Agar hech qaysi holat tushmasa - menyuni ko'rsatish
+      // Hech narsa tushmasa asosiy menyu
       await ctx.reply(
-        'Iltimos, quyidagi menyudan foydalaning:',
+        'Quyidagi menyudan foydalaning:',
         this.botFlowService.mainMenu(),
       );
     } catch (error) {
       this.logger.error('Error in onMessage:', error);
-      await ctx.reply('Texnik nosozlik. Iltimos, kuting...');
+      await ctx.reply('Texnik nosozlik yuz berdi.');
     }
   }
-
   async listRequests(ctx: Context, page: number, isEdit: boolean = false) {
     if (!ctx.from) return;
     const { requests, totalPages, total } =
@@ -600,23 +615,49 @@ export class BotUpdate {
 
       // 2. Ariza yaratish qismi
       case 'REQ_DISTRICT':
+        // 1. Bekor qilishni tekshiramiz
+        if (ctx.text === '❌ Bekor qilish / Отмена' || ctx.text === '❌ Bekor qilish') {
+          await this.redisService.setUserState(userId, {
+            type: 'IDLE',
+            step: 'NONE',
+            data: {},
+          });
+          return ctx.reply(
+            'Jarayon bekor qilindi.',
+            this.botFlowService.mainMenu(),
+          );
+        }
+
+        // 2. Agar foydalanuvchi tugmani bosmasdan boshqa narsa yozsa
         await ctx.reply(
-          'Hududni tanlang: / Выберите район:',
+          'Iltimos, hududni tepadagi tugmalardan tanlang: / Пожалуйста, выберите район из кнопок выше:',
           this.botFlowService.districtMenu(),
         );
         break;
 
       case 'REQ_MAHALLA':
-        // Redis'dan user ma'lumotlarini olamiz (u yerda district bor)
+        // 1. Bekor qilishni tekshiramiz
+        if (ctx.text === '❌ Bekor qilish / Отмена' || ctx.text === '❌ Bekor qilish') {
+          await this.redisService.setUserState(userId, {
+            type: 'IDLE',
+            step: 'NONE',
+            data: {},
+          });
+          return ctx.reply(
+            'Jarayon bekor qilindi.',
+            this.botFlowService.mainMenu(),
+          );
+        }
+
+        // 2. Aks holda hududni Redis'dan olib, mahallalar menyusini qayta chiqaramiz
         const userState = await this.botService.findOrCreateUser(userId);
         const district = userState.state.data.district;
 
         await ctx.reply(
-          'Mahalla nomini tanlang: / Выберите махаллю:',
+          'Iltimos, mahalla nomini yuqoridagi tugmalardan tanlang: / Пожалуйста, выберите махаллю из кнопок выше:',
           this.botFlowService.mahallaMenu(district),
         );
         break;
-
       case 'REQ_BUILDING':
         await ctx.reply(
           'Bino raqamini (uy raqami) kiriting: / Введите номер дома:',
