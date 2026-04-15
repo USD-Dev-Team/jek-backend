@@ -1,5 +1,11 @@
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Controller, Post, Body, InternalServerErrorException, HttpException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  InternalServerErrorException,
+  HttpException,
+} from '@nestjs/common';
 import { LoginDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
 import { AuthService } from './auth.service';
 
@@ -19,10 +25,6 @@ export class AuthController {
 
       return {
         message: result.message,
-        userId: result.userId,
-        role: result.role,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
       };
     } catch (error) {
       if (error instanceof HttpException) throw error;
@@ -44,6 +46,9 @@ export class AuthController {
         message: result.message,
         userId: result.userId,
         role: result.role,
+        first_name: result.first_name,
+        last_name: result.last_name,
+        addresses: result.addresses.map(el=>el.address),
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,
       };

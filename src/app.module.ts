@@ -24,8 +24,8 @@ import { RedisModule } from '@nestjs-modules/ioredis';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const host = configService.get<string>('REDIS_HOST', 'localhost');
-        const port = configService.get<number>('REDIS_PORT', 6379);
+        const host = configService.get<string>('REDIS_HOST') || 'localhost';
+        const port = configService.get<number>('REDIS_PORT') || 6379;
         const password = configService.get<string>('REDIS_PASSWORD');
 
         return {

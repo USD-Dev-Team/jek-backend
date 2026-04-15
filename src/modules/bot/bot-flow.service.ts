@@ -3,13 +3,17 @@ import { Context, Markup } from 'telegraf';
 import { BotService } from './bot.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class BotFlowService {
   private readonly logger = new Logger(BotFlowService.name);
   private mahallaData: any;
 
-  constructor(private readonly botService: BotService) {
+  constructor(
+    private readonly botService: BotService,
+    private readonly redisService: RedisService,
+  ) {
     this.loadMahallaData();
   }
 
@@ -115,34 +119,48 @@ export class BotFlowService {
     const { state } = userWithState;
 
     // В Redis мы храним данные в state.data (тип RequestData)
+
+    if (text === '❌ Bekor qilish / Отмена') {
+      // Redis'dagi vaqtinchalik ma'lumotlarni o'chiramiz
+      await this.redisService.deleteUserState(userId);
+
+      // Asosiy menyuga qaytaramiz
+      await ctx.reply(
+        'Jarayon bekor qilindi. / Процесс отменен.',
+        this.mainMenu(), // Bu funksiya asosiy menyu tugmalarini chiqaradi
+      );
+      return; // Funksiyadan chiqib ketamiz
+    }
+
     const currentData = state.data;
 
     switch (state.step) {
+      // bot-flow.service.ts ichida
+
       case 'REQ_DISTRICT':
+        // Agar foydalanuvchi pastdagi "Bekor qilish" tugmasini bossa:
+        if (text === '❌ Bekor qilish / Отмена' || text === '❌ Bekor qilish') {
+          await this.redisService.setUserState(userId, {
+            type: 'IDLE',
+            step: 'NONE',
+            data: {},
+          });
+          return ctx.reply('Jarayon bekor qilindi.', this.mainMenu());
+        }
+
+        // Agar user tugmani bosmay boshqa gap yozsa:
         await ctx.reply(
           'Iltimos, tepadagi tugmalardan hududni tanlang: / Пожалуйста, выберите район из кнопок выше:',
           this.districtMenu(),
         );
-        return;
-
-      case 'REQ_MAHALLA':
-        if (text === '❌ Bekor qilish / Отмена') return;
-        // Данные о районе уже лежат в Redis (из Action onDistrictSelect)
-        await ctx.reply(
-          'Iltimos, yuqoridagi tugmalardan mahallani tanlang: / Пожалуйста, выберите махаллю из кнопок выше:',
-          this.mahallaMenu(currentData.district),
-        );
-        return;
-
+        break;
       case 'REQ_BUILDING':
-        if (text === '❌ Bekor qilish / Отмена') return;
         if (!text) {
           await ctx.reply(
             'Iltimos, bino raqamini kiriting: / Пожалуйста, введите номер дома:',
           );
           return;
         }
-        // Сохраняем номер дома в Redis
         await this.botService.updateUserData(userId, {
           type: 'REQUEST',
           step: 'REQ_APARTMENT',
@@ -150,7 +168,6 @@ export class BotFlowService {
         });
         await ctx.reply('Xonadon raqamini kiriting: / Введите номер квартиры:');
         return;
-
       case 'REQ_APARTMENT':
         if (text === '❌ Bekor qilish / Отмена') return;
         if (!text) {
@@ -183,7 +200,7 @@ export class BotFlowService {
           data: { ...currentData, description: text },
         });
         await ctx.reply(
-          'Muammoni tasdiqlovchi rasm(lar) yuboring: / Отправьте фото, подтверждающие проблему:',
+          'Muammoni tasdiqlovchi rasm(lar) yuboring(Rasmlar alohida yuborilishi kerak): / Отправьте фото, подтверждающие проблему(Фотографии необходимо отправить отдельно.):',
           Markup.keyboard([
             ['📸 Rasmsiz davom etish / Продолжить без фото'],
             ['❌ Bekor qilish / Отмена'],
@@ -273,7 +290,8 @@ export class BotFlowService {
     await ctx.reply(summary, {
       parse_mode: 'HTML',
       ...Markup.keyboard([
-        ['✅ Tasdiqlash / Подтвердить', '❌ Bekor qilish / Отмена'],
+        ['✅ Tasdiqlash / Подтвердить'],
+        ['❌ Bekor qilish / Отмена'],
       ])
         .oneTime()
         .resize(),
