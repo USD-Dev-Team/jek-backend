@@ -1,7 +1,11 @@
-import { Injectable, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { CreateRequestDto, UniversalFilterDto } from './dto/create-request.dto';
-import { Status_Flow } from '@prisma/client';
+import { jekRoles, Status_Flow } from '@prisma/client';
 import { BotService } from '../bot/bot.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { Markup } from 'telegraf';
@@ -122,6 +126,8 @@ export class RequestsService {
           id: true,
           request_number: true,
           description: true,
+          note: true,
+          rejection_reason: true,
           assigned_jek: {
             select: { id: true, first_name: true, last_name: true },
           },
@@ -288,51 +294,75 @@ export class RequestsService {
 
     if (!request) throw new ConflictException('Ariza topilmadi');
 
-    // 1. Shartni o'zgartiramiz: Faqat PENDING yoki JEK_REJECTED bo'lsagina ruxsat beramiz
-    const allowedStatuses = ['PENDING', 'JEK_REJECTED'];
-    if (!allowedStatuses.includes(request.status)) {
-      throw new ConflictException(
-        'Ushbu ariza allaqachon biriktirilgan yoki yopilgan',
-      );
+    // 1. Агар ариза PENDING бўлса - исталган ходим ўзига бириктириши мумкин
+    if (request.status === 'PENDING') {
+      return this.processAssignment(requestId, jekId, request, 'PENDING');
     }
 
-    // 2. Arizani yangilash
+    // 2. Агар ариза RAD этилган бўлса (хоҳ JEK, хоҳ USER томонидан)
+    const isRejected = ['REJECTED'].includes(request.status);
+
+    if (isRejected) {
+      // Агар бу ариза аввал айнан шу ходимга бириктирилган бўлса
+      if (request.assigned_jek_id === jekId) {
+        return this.processAssignment(
+          requestId,
+          jekId,
+          request,
+          request.status,
+        );
+      } else {
+        // Агар бошқа ходимники бўлса ва у ҳали PENDING эмас бўлса
+        throw new ConflictException(
+          'Ushbu rad etilgan ariza boshqa xodimga tegishli',
+        );
+      }
+    }
+
+    // 3. Бошқа ҳамма ҳолатларда (масалан, аллақачон IN_PROGRESS ёки COMPLETED бўлса)
+    throw new ConflictException('Ushbu arizani qabul qilib bo‘lmaydi');
+  }
+
+  private async processAssignment(
+    requestId: string,
+    jekId: string,
+    request: any,
+    oldStatus: string,
+  ) {
     const updated = await this.prisma.requests.update({
       where: { id: requestId },
       data: {
         assigned_jek_id: jekId,
-        status: 'IN_PROGRESS' as Status_Flow,
+        status: 'IN_PROGRESS',
       },
     });
 
-    // 3. Xabar yuborish
+    // Хабар юбориш
     if (request.user?.telegram_id) {
-      let msg = `⏳ <b>Arizangiz qabul qilindi!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz JEK xodimi tomonidan o'rganish uchun qabul qilindi.`;
-
-      // Agar oldingi holat rad etilgan bo'lsa, xabarni biroz o'zgartirish mumkin
-      if (request.status === 'JEK_REJECTED') {
-        msg = `⏳ <b>Arizangiz qayta ko'rib chiqilmoqda!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz e'tirozdan so'ng JEK xodimi tomonidan qayta ishga tushirildi.`;
-      }
+      const msg =
+        oldStatus === 'PENDING'
+          ? `⏳ <b>Arizangiz qabul qilindi!</b>\n\n#${request.request_number} raqamli murojaatingiz mutaxassis tomonidan o'rganilmoqda.`
+          : `⏳ <b>Arizangiz qayta ishga tushirildi!</b>\n\n#${request.request_number} raqamli murojaatingiz e'tirozdan so'ng qayta ko'rib chiqishga olindi.`;
 
       await this.botService.sendNotification(request.user.telegram_id, msg);
     }
 
-    // 4. Log yaratish (old_status endi dinamik: PENDING yoki JEK_REJECTED bo'ladi)
+    // Log
     await this.prisma.requestStatusLog.create({
       data: {
         request_id: requestId,
-        old_status: request.status as Status_Flow,
-        new_status: 'IN_PROGRESS' as Status_Flow,
+        old_status: oldStatus as any,
+        new_status: 'IN_PROGRESS',
         changed_by_role: 'JEK',
         changed_by_id: jekId,
         note:
-          request.status === 'JEK_REJECTED'
-            ? "E'tirozdan so'ng ariza qayta biriktirildi"
-            : "Ariza xodim tomonidan ko'rib chiqish uchun qabul qilindi",
+          oldStatus === 'PENDING'
+            ? 'Qabul qilindi'
+            : "E'tirozdan so'ng qayta tiklandi",
       },
     });
 
-    return { success: true, message: 'Ariza biriktirildi' };
+    return { success: true, message: 'Ariza jarayonga o‘tkazildi' };
   }
 
   async complete(

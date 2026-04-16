@@ -29,11 +29,9 @@ import {
 
 import { jekRoles, Status_Flow } from '@prisma/client';
 import {
-  CompleteRequestDto,
   RejectRequestDto,
 } from './dto/update-request-status.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { MediaModule } from '../media/media.module';
 import { MediaService } from '../media/media.service';
 
 @ApiTags('Requests (Arizalar)')

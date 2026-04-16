@@ -117,6 +117,7 @@ export class UniversalFilterDto {
       'JEK_COMPLETED',
       'JEK_REJECTED',
       'COMPLETED',
+      'REJECTED'
     ],
   })
   @IsOptional()

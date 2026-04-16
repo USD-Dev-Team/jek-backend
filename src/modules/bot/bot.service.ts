@@ -64,7 +64,7 @@ export class BotService {
     await this.prisma.requests.update({
       where: { id: requestId },
       data: {
-        status: 'IN_PROGRESS' as Status_Flow,
+        status: 'REJECTED' as Status_Flow,
         note: reason,
         rejection_reason: null,
       } as any,
@@ -75,7 +75,7 @@ export class BotService {
       data: {
         request_id: requestId,
         old_status: request.status,
-        new_status: 'IN_PROGRESS',
+        new_status: 'REJECTED',
         changed_by_role: 'USER',
         changed_by_id: String(telegramId),
         note: reason,
@@ -118,6 +118,8 @@ export class BotService {
       );
     }
   }
+
+  
   async findOrCreateUser(telegramId: bigint) {
     const user = await this.prisma.users.findUnique({
       where: { telegram_id: telegramId },
