@@ -1,15 +1,26 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { StatisticsService } from './statistics.service';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { GeneralStatisticsDto } from './dto/statistics.dto';
-
+import { TokenGuard } from 'src/common/guards/token.guard';
+import { RoleGuard } from 'src/common/guards/role.guard';
+import { Roles } from 'src/common/decorators/role';
+import { jekRoles } from '@prisma/client';
+@ApiBearerAuth('token')
 @ApiTags('Statistics')
 @Controller('statistics')
-// @UseGuards(JwtAuthGuard, RolesGuard) // Admin ekanini tekshirish uchun guardlar
+@ApiTags('Statistics')
 export class StatisticsController {
   constructor(private readonly statisticsService: StatisticsService) {}
 
   @Get('general')
+  @UseGuards(TokenGuard, RoleGuard)
+  @Roles(jekRoles.JEK, jekRoles.INSPECTION, jekRoles.GOVERNMENT)
   @ApiOperation({
     summary: 'Dashboard uchun barcha statistik ma’lumotlarni olish',
   })

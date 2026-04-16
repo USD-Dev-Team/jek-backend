@@ -1,7 +1,11 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/core/database/prisma.service';
 import { CreateRequestDto, UniversalFilterDto } from './dto/create-request.dto';
-import { Status_Flow } from '@prisma/client';
+import { jekRoles, Status_Flow } from '@prisma/client';
 import { BotService } from '../bot/bot.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { Markup } from 'telegraf';
@@ -109,7 +113,7 @@ export class RequestsService {
       const searchCondition = { contains: search, mode: 'insensitive' as any };
       where.OR = [
         { request_number: searchCondition },
-        { assigned_jek_id : searchCondition},
+        { assigned_jek_id: searchCondition },
         { user: { full_name: searchCondition } },
         { user: { phoneNumber: searchCondition } },
       ];
@@ -122,7 +126,11 @@ export class RequestsService {
           id: true,
           request_number: true,
           description: true,
-          assigned_jek:true,
+          note: true,
+          rejection_reason: true,
+          assigned_jek: {
+            select: { id: true, first_name: true, last_name: true },
+          },
           status: true,
           createdAt: true,
           address: {
@@ -147,7 +155,7 @@ export class RequestsService {
           },
         },
         orderBy: { createdAt: 'desc' },
-        skip: skip, 
+        skip: skip,
         take: limit,
       }),
       this.prisma.requests.count({ where }),
@@ -286,54 +294,84 @@ export class RequestsService {
 
     if (!request) throw new ConflictException('Ariza topilmadi');
 
-    // 1. Shartni o'zgartiramiz: Faqat PENDING yoki JEK_REJECTED bo'lsagina ruxsat beramiz
-    const allowedStatuses = ['PENDING', 'JEK_REJECTED'];
-    if (!allowedStatuses.includes(request.status)) {
-      throw new ConflictException(
-        'Ushbu ariza allaqachon biriktirilgan yoki yopilgan',
-      );
+    // 1. Агар ариза PENDING бўлса - исталган ходим ўзига бириктириши мумкин
+    if (request.status === 'PENDING') {
+      return this.processAssignment(requestId, jekId, request, 'PENDING');
     }
 
-    // 2. Arizani yangilash
+    // 2. Агар ариза RAD этилган бўлса (хоҳ JEK, хоҳ USER томонидан)
+    const isRejected = ['REJECTED'].includes(request.status);
+
+    if (isRejected) {
+      // Агар бу ариза аввал айнан шу ходимга бириктирилган бўлса
+      if (request.assigned_jek_id === jekId) {
+        return this.processAssignment(
+          requestId,
+          jekId,
+          request,
+          request.status,
+        );
+      } else {
+        // Агар бошқа ходимники бўлса ва у ҳали PENDING эмас бўлса
+        throw new ConflictException(
+          'Ushbu rad etilgan ariza boshqa xodimga tegishli',
+        );
+      }
+    }
+
+    // 3. Бошқа ҳамма ҳолатларда (масалан, аллақачон IN_PROGRESS ёки COMPLETED бўлса)
+    throw new ConflictException('Ushbu arizani qabul qilib bo‘lmaydi');
+  }
+
+  private async processAssignment(
+    requestId: string,
+    jekId: string,
+    request: any,
+    oldStatus: string,
+  ) {
     const updated = await this.prisma.requests.update({
       where: { id: requestId },
       data: {
         assigned_jek_id: jekId,
-        status: 'IN_PROGRESS' as Status_Flow,
+        status: 'IN_PROGRESS',
       },
     });
 
-    // 3. Xabar yuborish
+    // Хабар юбориш
     if (request.user?.telegram_id) {
-      let msg = `⏳ <b>Arizangiz qabul qilindi!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz JEK xodimi tomonidan o'rganish uchun qabul qilindi.`;
-
-      // Agar oldingi holat rad etilgan bo'lsa, xabarni biroz o'zgartirish mumkin
-      if (request.status === 'JEK_REJECTED') {
-        msg = `⏳ <b>Arizangiz qayta ko'rib chiqilmoqda!</b>\n\nSizning #${request.request_number} raqamli murojaatingiz e'tirozdan so'ng JEK xodimi tomonidan qayta ishga tushirildi.`;
-      }
+      const msg =
+        oldStatus === 'PENDING'
+          ? `⏳ <b>Arizangiz qabul qilindi!</b>\n\n#${request.request_number} raqamli murojaatingiz mutaxassis tomonidan o'rganilmoqda.`
+          : `⏳ <b>Arizangiz qayta ishga tushirildi!</b>\n\n#${request.request_number} raqamli murojaatingiz e'tirozdan so'ng qayta ko'rib chiqishga olindi.`;
 
       await this.botService.sendNotification(request.user.telegram_id, msg);
     }
 
-    // 4. Log yaratish (old_status endi dinamik: PENDING yoki JEK_REJECTED bo'ladi)
+    // Log
     await this.prisma.requestStatusLog.create({
       data: {
         request_id: requestId,
-        old_status: request.status as Status_Flow,
-        new_status: 'IN_PROGRESS' as Status_Flow,
+        old_status: oldStatus as any,
+        new_status: 'IN_PROGRESS',
         changed_by_role: 'JEK',
         changed_by_id: jekId,
         note:
-          request.status === 'JEK_REJECTED'
-            ? "E'tirozdan so'ng ariza qayta biriktirildi"
-            : "Ariza xodim tomonidan ko'rib chiqish uchun qabul qilindi",
+          oldStatus === 'PENDING'
+            ? 'Qabul qilindi'
+            : "E'tirozdan so'ng qayta tiklandi",
       },
     });
 
-    return { success: true, message: 'Ariza biriktirildi' };
+    return { success: true, message: 'Ariza jarayonga o‘tkazildi' };
   }
 
-  async complete(requestId: string, jekId: string, note: string) {
+  async complete(
+    requestId: string,
+    jekId: string,
+    note: string,
+    photo_urls: string[], // Бу ерда [/uploads/requests/uuid.jpg] кўринишидаги массив келади
+  ) {
+    // 1. Аризани текшириш
     const request = await this.prisma.requests.findUnique({
       where: { id: requestId },
       include: { user: true },
@@ -341,68 +379,54 @@ export class RequestsService {
 
     if (!request) throw new ConflictException('Ariza topilmadi');
 
-    // Tekshiruv: Faqat IN_PROGRESS holatidagi arizani yopish mumkin
-    if (request.status !== 'IN_PROGRESS') {
-      throw new ConflictException(
-        'Faqat jarayondagi arizalarni yakunlash mumkin',
-      );
-    }
-
-    if (request.assigned_jek_id !== jekId)
-      throw new ConflictException('Sizga biriktirilmagan arizani yopolmaysiz');
-
-    const updated = await this.prisma.requests.update({
+    // 2. Базани янгилаш
+    const updatedRequest = await this.prisma.requests.update({
       where: { id: requestId },
       data: {
-        status: 'JEK_COMPLETED' as Status_Flow,
+        status: 'JEK_COMPLETED',
         note: note,
         completedAt: new Date(),
+        requestPhotos: {
+          create: photo_urls.map((path) => ({
+            file_url: path,
+          })),
+        },
       },
     });
 
-    // Xabar yuborish (Tugmalar bilan)
+    if (photo_urls && photo_urls.length > 0) {
+      // КУТИБ ТУРИНГ: Расмларни алоҳида альбом қилиб юборамиз
+      // Бизга тўлиқ дискдаги йўл керак, шунинг учун photo_urls-ни ўзини юборамиз
+      await this.botService.sendAlbum(request.user.telegram_id, photo_urls);
+    }
+    // 3. БОТ ОРҚАЛИ ЮБОРИШ (ЭНГ МУҲИМ ЖОЙИ)
     if (request.user?.telegram_id) {
+      // А) Аввал тугмали хабарни юборамиз
       const buttons = Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            '✅ Tasdiqlash',
+            '✅ Tasdiqlash / Подтвердить',
             `user_confirm_req_${request.id}`,
           ),
         ],
         [
           Markup.button.callback(
-            "❌ E'tiroz bildirish",
+            "❌ E'tiroz / Возражение",
             `user_reject_req_${request.id}`,
           ),
         ],
       ]);
 
-      // MUHIM: Foydalanuvchi javob yozishi uchun uning stepini yangilab qo'yamiz
-      // Bu foydalanuvchi bemalol e'tiroz yozishi yoki tasdiqlashi uchun kerak
-      await this.botService.updateUserData(request.user.telegram_id, {
-        registration_step: 'COMPLETED', // Asosiy holatda tursin
-      });
-
       await this.botService.sendNotificationWithButtons(
         request.user.telegram_id,
-        `✅ <b>Murojaat JEK tomonidan yakunlandi!</b>\n\nSizning #${request.request_number} raqamli arizangiz xodim tomonidan bajarildi deb belgilandi.\n\n📝 <b>Xodim izohi:</b> ${note || "Ko'rsatilmagan"}\n\n<i>Iltimos, ish sifatini tasdiqlang yoki e'tiroz bildiring:</i>`,
+        `✅ <b>Murojaat yakunlandi!</b>\n\n#${request.request_number}-sonli arizangiz bajarildi.\n📝 <b>Izoh:</b> ${note}`,
         buttons,
       );
+
+      // Б) Расмларни юбориш (URL эмас, локал йўл орқали)
     }
 
-    // Log yaratish
-    await this.prisma.requestStatusLog.create({
-      data: {
-        request_id: requestId,
-        old_status: request.status as Status_Flow, // Dinamik qildik (oldin IN_PROGRESS edi)
-        new_status: 'JEK_COMPLETED' as Status_Flow,
-        changed_by_role: 'JEK',
-        changed_by_id: jekId,
-        note,
-      },
-    });
-
-    return { success: true, message: 'Ariza yakunlandi' };
+    return { success: true, data: updatedRequest };
   }
 
   async reject(requestId: string, jekId: string, reason: string) {
@@ -430,13 +454,13 @@ export class RequestsService {
       const buttons = Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            '✅ Tasdiqlash (Yopish)',
+            '✅ Tasdiqlash (Yopish)/Подтвердить (Закрыть)',
             `user_confirm_req_${request.id}`,
           ),
         ],
         [
           Markup.button.callback(
-            "❌ E'tiroz bildirish",
+            "❌ E'tiroz bildirish/Возражение",
             `user_reject_req_${request.id}`,
           ),
         ],

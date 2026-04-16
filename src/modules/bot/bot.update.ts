@@ -5,6 +5,14 @@ import { Logger } from '@nestjs/common';
 import { BotFlowService } from './bot-flow.service';
 import { RedisService } from '../redis/redis.service';
 
+const statusMap = {
+  PENDING: '⏳ Kutilmoqda / Ожидание',
+  IN_PROGRESS: '👨‍🔧 Jarayonda / В процессе',
+  COMPLETED: '✅ Bajarildi / Выполнено',
+  REJECTED: '❌ Rad etildi / Отклонено',
+  JEK_COMPLETED: '🏗 JEK bajardi / Выполнено ЖЭК',
+  JEK_REJECTED: '🚫 JEK rad etdi / Отклонено ЖЭК',
+};
 @Update()
 export class BotUpdate {
   private readonly logger = new Logger(BotUpdate.name);
@@ -221,7 +229,7 @@ export class BotUpdate {
       message += `📍 Hudud: ${addr.district}\n`;
       message += `🏠 Manzil: ${fullAddr}\n`;
       message += `📝 Muammo: ${req.description}\n`;
-      message += `⏳ Holat: ${req.status}\n`;
+      message += `⏳ Holat: ${statusMap[req.status] || statusMap.PENDING}\n`;
       if (req.note) message += `💬 Izoh: ${req.note}\n`;
       message += `📅 Sana: ${req.createdAt.toLocaleDateString()}`;
 
@@ -543,6 +551,7 @@ export class BotUpdate {
     let message = `📋 <b>Sizning faol arizalaringiz / Ваши активные заявки</b> (Jami: ${total})\n\n`;
     const actionRow: any[] = [];
     requests.forEach((req: any, index: number) => {
+      const statusText = statusMap[req.status] || req.status;
       const statusEmoji =
         req.status === 'COMPLETED' || req.status === 'JEK_COMPLETED'
           ? '✅'
@@ -550,7 +559,7 @@ export class BotUpdate {
             ? '❌'
             : '⏳';
       const rowNum = (page - 1) * 5 + index + 1;
-      message += `${rowNum}. <b>#${req.request_number}</b>\n📝 Holat / Статус: ${statusEmoji} ${req.status}\n📅 Sana / Дата: ${req.createdAt.toLocaleDateString()}\n\n`;
+      message += `${rowNum}. <b>#${req.request_number}</b>\n📝 Holat / Статус: ${statusText}\n📅 Sana / Дата: ${req.createdAt.toLocaleDateString()}\n\n`;
       actionRow.push(
         Markup.button.callback(`${rowNum}`, `view_req_${req.id}_p_${page}`),
       );
@@ -616,7 +625,10 @@ export class BotUpdate {
       // 2. Ariza yaratish qismi
       case 'REQ_DISTRICT':
         // 1. Bekor qilishni tekshiramiz
-        if (ctx.text === '❌ Bekor qilish / Отмена' || ctx.text === '❌ Bekor qilish') {
+        if (
+          ctx.text === '❌ Bekor qilish / Отмена' ||
+          ctx.text === '❌ Bekor qilish'
+        ) {
           await this.redisService.setUserState(userId, {
             type: 'IDLE',
             step: 'NONE',
@@ -637,7 +649,10 @@ export class BotUpdate {
 
       case 'REQ_MAHALLA':
         // 1. Bekor qilishni tekshiramiz
-        if (ctx.text === '❌ Bekor qilish / Отмена' || ctx.text === '❌ Bekor qilish') {
+        if (
+          ctx.text === '❌ Bekor qilish / Отмена' ||
+          ctx.text === '❌ Bekor qilish'
+        ) {
           await this.redisService.setUserState(userId, {
             type: 'IDLE',
             step: 'NONE',

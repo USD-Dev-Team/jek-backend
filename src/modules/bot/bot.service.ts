@@ -8,6 +8,9 @@ import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { jekRoles, Status_Flow } from '@prisma/client';
 import { RedisService, UserRedisState } from '../redis/redis.service';
+import { InputMediaPhoto } from 'telegraf/types'; // Типни импорт қилинг
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 @Injectable()
 export class BotService {
@@ -115,6 +118,8 @@ export class BotService {
       );
     }
   }
+
+  
   async findOrCreateUser(telegramId: bigint) {
     const user = await this.prisma.users.findUnique({
       where: { telegram_id: telegramId },
@@ -413,6 +418,32 @@ export class BotService {
       this.logger.log(
         `Photo added to Redis for user ${telegramId}. Total: ${currentPhotos.length}`,
       );
+    }
+  }
+
+  async sendAlbum(chatId: bigint, photoPaths: string[]) {
+    try {
+      const mediaGroup = photoPaths
+        .filter((p) => p && !p.includes('undefined')) // Undefined'larni chiqarib tashlaymiz
+        .map((p) => {
+          // Agar p '/uploads/...' bilan boshlansa, uni to'liq yo'lga aylantiramiz
+          const absolutePath = join(process.cwd(), p);
+
+          if (existsSync(absolutePath)) {
+            return {
+              type: 'photo',
+              media: { source: absolutePath }, // URL emas, faylning o'zi!
+            };
+          }
+          return null;
+        })
+        .filter((item) => item !== null);
+
+      if (mediaGroup.length > 0) {
+        await this.bot.telegram.sendMediaGroup(`${chatId}`, mediaGroup as any);
+      }
+    } catch (error) {
+      this.logger.error('Album yuborishda xato:', error);
     }
   }
 }
