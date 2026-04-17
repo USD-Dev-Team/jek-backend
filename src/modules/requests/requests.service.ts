@@ -128,6 +128,7 @@ export class RequestsService {
           description: true,
           note: true,
           rejection_reason: true,
+          completedAt:true,
           assigned_jek: {
             select: { id: true, first_name: true, last_name: true },
           },
