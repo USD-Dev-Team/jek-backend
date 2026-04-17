@@ -78,7 +78,7 @@ async function bootstrap(): Promise<void> {
     .setTitle('JEK Swagger API')
     .setDescription('JEK loyihasi uchun backend tizimi API hujjatlari')
     .setVersion('1.0.0')
-    .addServer('https://api.usderp.uz/jek', 'Production')
+    .addServer('https://api.usdsoft.uz/jek', 'Production')
     .addServer(`http://localhost:${port}`, 'Local')
     .addBearerAuth(
       {
