@@ -74,15 +74,16 @@ export class StatisticsService {
   private async getMonthlyDynamics(year: number, baseWhere: any) {
     // Har bir oy uchun ma'lumotlarni yig'ish (Joriy yil)
     const monthlyData = await this.prisma.$queryRaw`
-      SELECT 
-        EXTRACT(MONTH FROM "createdAt") as month,
-        COUNT(id) as count
-      FROM "requests"
-      WHERE EXTRACT(YEAR FROM "createdAt") = ${year}
-      GROUP BY month
-      ORDER BY month ASC
-    `;
-
+    SELECT 
+      EXTRACT(MONTH FROM "createdAt") as month,
+      COUNT(id) as count
+    FROM "requests"
+    WHERE EXTRACT(YEAR FROM "createdAt") = ${year}
+      -- Agar adminId kelgan bo'lsa, ushbu shart ishlaydi, bo'lmasa true qaytaradi
+      AND (${baseWhere.assigned_jek_id}::int IS NULL OR "assigned_jek_id" = ${baseWhere.assigned_jek_id})
+    GROUP BY month
+    ORDER BY month ASC
+  `;
     // Frontend uchun 12 talik massiv yasaymiz [0, 0, 15, 20...]
     const chartData = new Array(12).fill(0);
     (monthlyData as any[]).forEach((d) => {
