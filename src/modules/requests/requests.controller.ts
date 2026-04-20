@@ -42,7 +42,6 @@ export class RequestsController {
     private readonly requestsService: RequestsService,
     private readonly mediaService: MediaService,
   ) {}
-
   @Post()
   @ApiOperation({ summary: 'Yangi ariza yaratish (Bot orqali)' })
   create(@Body() createRequestDto: CreateRequestDto) {
@@ -115,36 +114,21 @@ export class RequestsController {
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.JEK)
   @Patch('complete/:id')
-  @ApiConsumes('multipart/form-data') // 👈 Swagger-да файл юклаш имконини очади
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        note: { type: 'string', description: 'Bajarilgan ish uchun izox' },
-        photos: {
-          type: 'array',
-          items: { type: 'string', format: 'binary' }, // 👈 Мана шу жойи файл танлагични чиқаради
-          description: 'Bir qancha rasm biriktirish mumkin',
-        },
-      },
-    },
-  })
-  @Patch('complete/:id')
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        note: { type: 'string', description: 'Izoh' },
+        note: { type: 'string', description: 'Bajarilgan ish haqida izox' },
         photos: {
           type: 'array',
           items: { type: 'string', format: 'binary' },
-          description: 'Rasmlar (binary)',
+          description: 'Ish jarayonidan suratlar(max 10 ta)',
         },
       },
     },
   })
-  @UseInterceptors(FilesInterceptor('photos', 10)) // Fayllarni bufferda qabul qilamiz
+  @UseInterceptors(FilesInterceptor('photos', 10))
   async completeRequest(
     @Param('id') requestId: string,
     @Body('note') note: string,
@@ -154,9 +138,8 @@ export class RequestsController {
     const jekId = req.user.id;
     const filePaths: string[] = [];
 
-    if (files && files.length > 0) {
+    if (files?.length) {
       for (const file of files) {
-        // 🚀 Endi 'this.mediaService' orqali chaqira olasiz
         const path = await this.mediaService.saveManual(file);
         filePaths.push(path);
       }
