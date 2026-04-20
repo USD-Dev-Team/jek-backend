@@ -28,9 +28,7 @@ import {
 } from '@nestjs/swagger';
 
 import { jekRoles, Status_Flow } from '@prisma/client';
-import {
-  RejectRequestDto,
-} from './dto/update-request-status.dto';
+import { RejectRequestDto } from './dto/update-request-status.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { MediaService } from '../media/media.service';
 
@@ -50,7 +48,6 @@ export class RequestsController {
 
   @UseGuards(TokenGuard, RoleGuard)
   @Roles('JEK')
-  @ApiBearerAuth()
   @Get('jek/list')
   @ApiOperation({
     summary: "Xodim uchun arizalar ro'yxati (Barcha statuslar bo'yicha )",
@@ -91,25 +88,11 @@ export class RequestsController {
   @UseGuards(TokenGuard, RoleGuard)
   @ApiParam({ name: 'id', description: 'Ariza ID (UUID)' })
   @Roles('JEK')
-  @ApiBearerAuth()
   @Patch('assign/:id')
   @ApiOperation({ summary: "Arizani o'ziga biriktirish (IN_PROGRESS)" })
   assign(@Param('id') id: string, @Request() req) {
     return this.requestsService.assign(id, req.user.id);
   }
-
-  // @UseGuards(TokenGuard, RoleGuard)
-  // @Roles('JEK')
-  // @ApiBearerAuth()
-  // @Patch('complete/:id')
-  // @ApiOperation({ summary: 'Arizani bajarilgan deb belgilash (JEK_COMPLETED)' })
-  // complete(
-  //   @Param('id') id: string,
-  //   @Body() note: CompleteRequestDto,
-  //   @Request() req,
-  // ) {
-  //   return this.requestsService.complete(id, req.user.id, note.note);
-  // }
 
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.JEK)
@@ -150,7 +133,6 @@ export class RequestsController {
 
   @UseGuards(TokenGuard, RoleGuard)
   @Roles('JEK')
-  @ApiBearerAuth()
   @Patch('reject/:id')
   @ApiOperation({ summary: 'Arizani rad etish (JEK_REJECTED)' })
   reject(
@@ -159,5 +141,12 @@ export class RequestsController {
     @Request() req,
   ) {
     return this.requestsService.reject(id, req.user.id, reason.reason);
+  }
+
+  @UseGuards(TokenGuard)
+  @Get('request/:id')
+  @ApiOperation({ summary: "Arizani Id si bo'yicha get qilish" })
+  async getById(@Param('id') id: string) {
+    return this.requestsService.getRequestById(id);
   }
 }

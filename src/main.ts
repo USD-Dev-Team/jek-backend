@@ -2,14 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, urlencoded, json } from 'express';
 import express from 'express';
 import { join } from 'path';
 import cookieParser from 'cookie-parser';
-
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-
 async function bootstrap(): Promise<void> {
   // BigInt serialization fix
   (BigInt.prototype as any).toJSON = function () {
@@ -19,6 +17,10 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
+
+  // main.ts
+  app.use(json({ limit: '10kb' })); // Жуда катта JSON-ларни тақиқлаш
+  app.use(urlencoded({ limit: '10kb', extended: true }));
 
   // Static files serving
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
@@ -104,9 +106,7 @@ async function bootstrap(): Promise<void> {
   appLogger.log(`📚 Swagger: http://localhost:${port}/swagger`);
 
   await app.listen(port);
-  appLogger.log(
-    `🚀 JEK [${nodeEnv}] started on port ${port}`,
-  );
+  appLogger.log(`🚀 JEK [${nodeEnv}] started on port ${port}`);
 }
 
 bootstrap().catch((err: unknown) => {

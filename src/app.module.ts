@@ -12,6 +12,7 @@ import { RequestPhotosModule } from './modules/request-photos/request-photos.mod
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { StatisticsModule } from './modules/statistics/statistics.module';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -45,6 +46,12 @@ import { RedisModule } from '@nestjs-modules/ioredis';
         signOptions: { expiresIn: '1h' },
       }),
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100, 
+      },
+    ]),
     AuthModule,
     UsersModule,
     AdminsModule,
