@@ -128,7 +128,7 @@ export class RequestsService {
           description: true,
           note: true,
           rejection_reason: true,
-          completedAt:true,                                                                                                   
+          completedAt: true,
           assigned_jek: {
             select: { id: true, first_name: true, last_name: true },
           },
@@ -380,6 +380,11 @@ export class RequestsService {
 
     if (!request) throw new ConflictException('Ariza topilmadi');
 
+    if (request.assigned_jek_id !== jekId)
+      throw new ForbiddenException(
+        'Sizga biriktirilmagan arizani tugata olmaysiz',
+      );
+
     // 2. Базани янгилаш
     const updatedRequest = await this.prisma.requests.update({
       where: { id: requestId },
@@ -436,6 +441,7 @@ export class RequestsService {
       include: { user: true },
     });
     if (!request) throw new ConflictException('Ariza topilmadi');
+    
     if (request.assigned_jek_id !== jekId)
       throw new ConflictException(
         'Sizga biriktirilmagan arizani rad etolmaysiz',
@@ -502,5 +508,47 @@ export class RequestsService {
 
     const sequence = String(count + 1).padStart(4, '0');
     return `REQ-${year}-${sequence}`;
+  }
+
+  async getRequestById(requestId: string) {
+    return {
+      success: true,
+      data: await this.prisma.requests.findUnique({
+        where: { id: requestId },
+        select: {
+          id: true,
+          request_number: true,
+          description: true,
+          note: true,
+          rejection_reason: true,
+          completedAt: true,
+          assigned_jek: {
+            select: { id: true, first_name: true, last_name: true },
+          },
+          status: true,
+          createdAt: true,
+          address: {
+            select: {
+              district: true,
+              neighborhood: true,
+              building_number: true,
+              apartment_number: true,
+            },
+          },
+          requestPhotos: {
+            select: {
+              id: true,
+              file_url: true,
+            },
+          },
+          user: {
+            select: {
+              full_name: true,
+              phoneNumber: true,
+            },
+          },
+        },
+      }),
+    };
   }
 }

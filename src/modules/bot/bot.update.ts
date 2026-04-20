@@ -66,6 +66,7 @@ export class BotUpdate {
       await ctx.reply("Xatolik yuz berdi. /start buyrug'ini qayta bering.");
     }
   }
+  
   @Action(/^dist_/)
   async onDistrictSelect(ctx: Context) {
     if (!ctx.from || !('data' in ctx.callbackQuery!)) return;
