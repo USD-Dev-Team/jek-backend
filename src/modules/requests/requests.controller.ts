@@ -147,6 +147,7 @@ export class RequestsController {
   @Get('request/:id')
   @ApiOperation({ summary: "Arizani Id si bo'yicha get qilish" })
   async getById(@Param('id') id: string) {
-    return this.requestsService.getRequestById(id);
+    return this.requestsService.getRequestDetailsWithLogs(id);
   }
+
 }

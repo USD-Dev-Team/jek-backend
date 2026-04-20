@@ -9,6 +9,7 @@ import { jekRoles, Status_Flow } from '@prisma/client';
 import { BotService } from '../bot/bot.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { Markup } from 'telegraf';
+import { groupBy } from 'rxjs';
 
 @Injectable()
 export class RequestsService {
@@ -441,7 +442,7 @@ export class RequestsService {
       include: { user: true },
     });
     if (!request) throw new ConflictException('Ariza topilmadi');
-    
+
     if (request.assigned_jek_id !== jekId)
       throw new ConflictException(
         'Sizga biriktirilmagan arizani rad etolmaysiz',
@@ -510,45 +511,79 @@ export class RequestsService {
     return `REQ-${year}-${sequence}`;
   }
 
-  async getRequestById(requestId: string) {
-    return {
-      success: true,
-      data: await this.prisma.requests.findUnique({
-        where: { id: requestId },
-        select: {
-          id: true,
-          request_number: true,
-          description: true,
-          note: true,
-          rejection_reason: true,
-          completedAt: true,
-          assigned_jek: {
-            select: { id: true, first_name: true, last_name: true },
-          },
-          status: true,
-          createdAt: true,
-          address: {
-            select: {
-              district: true,
-              neighborhood: true,
-              building_number: true,
-              apartment_number: true,
-            },
-          },
-          requestPhotos: {
-            select: {
-              id: true,
-              file_url: true,
-            },
-          },
-          user: {
-            select: {
-              full_name: true,
-              phoneNumber: true,
-            },
+  async getRequestDetailsWithLogs(requestId: string) {
+    const result = await this.prisma.requests.findUnique({
+      where: { id: requestId },
+      select: {
+        id: true,
+        request_number: true,
+        description: true,
+        note: true,
+        rejection_reason: true,
+        completedAt: true,
+        status: true,
+        createdAt: true,
+        assigned_jek: {
+          select: { id: true, first_name: true, last_name: true },
+        },
+        address: {
+          select: {
+            district: true,
+            neighborhood: true,
+            building_number: true,
+            apartment_number: true,
           },
         },
-      }),
+        requestPhotos: {
+          select: { id: true, file_url: true },
+        },
+        user: {
+          select: { full_name: true, phoneNumber: true },
+        },
+        // Statuslar tarixini shu yerda olib kelamiz
+        requestStatusLogs: {
+          where: { note: { not: null } },
+          select: {
+            changed_by_role: true,
+            note: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!result) {
+      return { success: false, message: 'Ariza topilmadi' };
+    }
+
+    // 1. Status loglarini guruhlash (Reduce mantiqi)
+    const groupedNotes = result.requestStatusLogs.reduce(
+      (acc, log) => {
+        const role = log.changed_by_role;
+        if (!acc[role]) {
+          acc[role] = [];
+        }
+        if (log.note) {
+          acc[role].push({
+            note: log.note,
+            createdAt: log.createdAt,
+          });
+        }
+        return acc;
+      },
+      {} as Record<string, any[]>,
+    );
+
+    // 2. status_logs massivini natijadan chiqarib tashlab, guruhlanganini qo'shamiz
+    const { requestStatusLogs, ...requestData } = result;
+
+    return {
+      success: true,
+      data: {
+        ...requestData,
+        history_notes: groupedNotes,
+      },
     };
   }
 }
