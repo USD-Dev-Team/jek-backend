@@ -65,8 +65,7 @@ export class BotService {
       where: { id: requestId },
       data: {
         status: 'REJECTED' as Status_Flow,
-        note: reason,
-        rejection_reason: null,
+        rejection_reason: reason,
       } as any,
     });
 
