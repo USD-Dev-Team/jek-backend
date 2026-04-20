@@ -380,6 +380,11 @@ export class RequestsService {
 
     if (!request) throw new ConflictException('Ariza topilmadi');
 
+    if (request.assigned_jek_id !== jekId)
+      throw new ForbiddenException(
+        'Sizga biriktirilmagan arizani tugata olmaysiz',
+      );
+
     // 2. Базани янгилаш
     const updatedRequest = await this.prisma.requests.update({
       where: { id: requestId },
@@ -436,6 +441,7 @@ export class RequestsService {
       include: { user: true },
     });
     if (!request) throw new ConflictException('Ariza topilmadi');
+    
     if (request.assigned_jek_id !== jekId)
       throw new ConflictException(
         'Sizga biriktirilmagan arizani rad etolmaysiz',
