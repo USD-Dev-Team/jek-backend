@@ -9,6 +9,7 @@ import { jekRoles, Status_Flow } from '@prisma/client';
 import { BotService } from '../bot/bot.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { Markup } from 'telegraf';
+import { groupBy } from 'rxjs';
 
 @Injectable()
 export class RequestsService {
@@ -441,7 +442,7 @@ export class RequestsService {
       include: { user: true },
     });
     if (!request) throw new ConflictException('Ariza topilmadi');
-    
+
     if (request.assigned_jek_id !== jekId)
       throw new ConflictException(
         'Sizga biriktirilmagan arizani rad etolmaysiz',
@@ -550,5 +551,33 @@ export class RequestsService {
         },
       }),
     };
+  }
+
+  async getAllNoteAndReason(requestId: string) {
+    const logs = await this.prisma.requestStatusLog.findMany({
+      select: {
+        changed_by_role: true,
+        note: true,
+        createdAt: true,
+      },
+      where: {
+        request_id: requestId,
+        note: { not: null }, // Faqat izohi borlarini olamiz
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Ma'lumotlarni rol bo'yicha guruhlash (Reduce orqali)
+    const grouped = logs.reduce((acc, log) => {
+      const role = log.changed_by_role;
+      if (!acc[role]) {
+        acc[role] = [];
+      }
+      if (log.note)
+        acc[role].push({ note: log.note, createdAt: log.createdAt });
+      return acc;
+    }, {});
+
+    return grouped;
   }
 }
