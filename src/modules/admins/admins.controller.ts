@@ -20,7 +20,13 @@ import {
   UpdateAdminDto,
   updateStatusDto,
 } from './dto/update-admin.dto';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiParam, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { TokenGuard } from 'src/common/guards/token.guard';
 import { RoleGuard } from 'src/common/guards/role.guard';
 import { Roles } from 'src/common/decorators/role';
@@ -91,7 +97,7 @@ export class AdminsController {
       throw new InternalServerErrorException('Serverda xatolik yuz berdi');
     }
   }
-  
+
   @ApiOperation({
     summary: "Xodim holatini o'zgartirish (activ/inactiv)",
     description:
@@ -123,15 +129,21 @@ export class AdminsController {
     description:
       "Admin o'zining shaxsiy ma'lumotlarini o'zgartirishi. Ruxsat: JEK, INSPECTION, GOVERNMENT.",
   })
+  @ApiParam({
+    name: 'id',
+    description: 'Xodim ID (UUID)',
+    required: true,
+    type: String,
+  })
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.JEK, jekRoles.INSPECTION, jekRoles.GOVERNMENT)
-  @Patch('update/profile')
-  async updateProfile(@Req() req: any, @Body() updateAdminDto: UpdateAdminDto) {
+  @Patch('update/profile/:id')
+  async updateProfileById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateAdminDto: UpdateAdminDto,
+  ) {
     try {
-      return await this.adminsService.updateProfile(
-        req['user'].id,
-        updateAdminDto,
-      );
+      return await this.adminsService.updateProfile(id, updateAdminDto);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Serverda xatolik yuz berdi');
@@ -143,18 +155,21 @@ export class AdminsController {
     description:
       'Hodimning joriy parolini yangisiga almashtirish. Ruxsat: JEK, INSPECTION, GOVERNMENT.',
   })
+  @ApiParam({
+    name: 'id',
+    description: 'Xodim ID (UUID)',
+    required: true,
+    type: String,
+  })
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.JEK, jekRoles.INSPECTION, jekRoles.GOVERNMENT)
-  @Patch('change/password')
+  @Patch('change/password/:id')
   async changePassword(
-    @Req() req: any,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() changePassword: ChangePasswordDto,
   ) {
     try {
-      return await this.adminsService.changePassword(
-        req['user'].id,
-        changePassword,
-      );
+      return await this.adminsService.changePassword(id, changePassword);
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Serverda xatolik yuz berdi');
