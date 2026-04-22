@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { GeneralStatisticsDto } from './dto/statistics.dto';
 import { PrismaService } from 'src/core/database/prisma.service';
-
+import { Prisma } from '@prisma/client';
 @Injectable()
 export class StatisticsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -72,22 +72,32 @@ export class StatisticsService {
   }
 
   private async getMonthlyDynamics(year: number, baseWhere: any) {
-    // Har bir oy uchun ma'lumotlarni yig'ish (Joriy yil)
+    const adminId = baseWhere.assigned_jek_id;
+
+    // 1. Динамик филтр ясаб оламиз
+    // Агар adminId бўлса, UUID типида солиштирамиз, бўлмаса бўш жой қолдирамиз
+    const adminFilter = adminId
+      ? Prisma.sql`AND "assigned_jek_id" = ${adminId}`
+      : Prisma.empty;
+
+    // 2. Сўровни юборамиз
     const monthlyData = await this.prisma.$queryRaw`
     SELECT 
       EXTRACT(MONTH FROM "createdAt") as month,
       COUNT(id) as count
     FROM "requests"
     WHERE EXTRACT(YEAR FROM "createdAt") = ${year}
-      -- Agar adminId kelgan bo'lsa, ushbu shart ishlaydi, bo'lmasa true qaytaradi
-      AND (${baseWhere.assigned_jek_id}::int IS NULL OR "assigned_jek_id" = ${baseWhere.assigned_jek_id})
+    ${adminFilter}  
     GROUP BY month
     ORDER BY month ASC
   `;
-    // Frontend uchun 12 talik massiv yasaymiz [0, 0, 15, 20...]
+
+    // 3. Маълумотни форматлаш
     const chartData = new Array(12).fill(0);
     (monthlyData as any[]).forEach((d) => {
-      chartData[d.month - 1] = Number(d.count);
+      // PostgreSQL баъзан ойни 1.0 (float) қайтариши мумкин, шунинг учун parseInt
+      const monthIndex = parseInt(d.month) - 1;
+      chartData[monthIndex] = Number(d.count);
     });
 
     return chartData;
