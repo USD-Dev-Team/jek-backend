@@ -75,7 +75,7 @@ export class RequestsController {
   }
 
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles('JEK', jekRoles.INSPECTION)
+  @Roles(jekRoles.JEK, jekRoles.GOVERNMENT, jekRoles.INSPECTION)
   @ApiOperation({
     summary: "Xodim uchun arizalar ro'yxatini filterli get qilish",
   })
@@ -149,5 +149,4 @@ export class RequestsController {
   async getById(@Param('id') id: string) {
     return this.requestsService.getRequestDetailsWithLogs(id);
   }
-
 }

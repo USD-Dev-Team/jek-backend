@@ -178,7 +178,8 @@ export class AdminsController {
 
   @ApiOperation({
     summary: "Xodim ma'lumotlarini olish",
-    description: "Xodimning ma'lumotlarini olish. Ruxsat: INSPECTION.",
+    description:
+      "Xodimning ma'lumotlarini olish. Ruxsat: INSPECTION, GOVERMENT.",
   })
   @ApiParam({
     name: 'id',
@@ -187,7 +188,7 @@ export class AdminsController {
     type: String,
   })
   @UseGuards(TokenGuard, RoleGuard)
-  @Roles(jekRoles.INSPECTION)
+  @Roles(jekRoles.INSPECTION, jekRoles.GOVERNMENT)
   @Get('find/:id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     try {
