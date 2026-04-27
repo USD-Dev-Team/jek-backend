@@ -76,8 +76,15 @@ export class RequestsService {
     const limit = Number(filter.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const { startDate, endDate, district, neighborhood, status, search } =
-      filter;
+    const {
+      assigned_jek_id,
+      startDate,
+      endDate,
+      district,
+      neighborhood,
+      status,
+      search,
+    } = filter;
 
     const where: any = {};
 
@@ -109,12 +116,12 @@ export class RequestsService {
       };
     }
 
+    if (assigned_jek_id) where.assigned_jek_id = assigned_jek_id;
     // Global Search mantiqi
     if (search) {
       const searchCondition = { contains: search, mode: 'insensitive' as any };
       where.OR = [
         { request_number: searchCondition },
-        { assigned_jek_id: searchCondition },
         { user: { full_name: searchCondition } },
         { user: { phoneNumber: searchCondition } },
       ];
