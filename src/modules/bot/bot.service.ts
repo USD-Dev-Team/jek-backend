@@ -307,13 +307,31 @@ export class BotService {
   }
 
   async confirmRequest(requestId: string) {
-    return this.prisma.requests.update({
+    const request = await this.prisma.requests.findUnique({
+      where: { id: requestId },
+    });
+    if (!request) throw new Error('Request not found');
+
+    const updated = await this.prisma.requests.update({
       where: { id: requestId },
       data: {
         status: 'COMPLETED' as Status_Flow,
         completedAt: new Date(),
       },
     });
+
+    await this.prisma.requestStatusLog.create({
+      data: {
+        request_id: requestId,
+        old_status: request.status,
+        new_status: 'COMPLETED',
+        changed_by_role: 'USER',
+        changed_by_id: request.user_id,
+        note: 'Foydalanuvchi tomonidan tasdiqlandi',
+      },
+    });
+
+    return updated;
   }
 
   async getRequestById(requestId: string) {
