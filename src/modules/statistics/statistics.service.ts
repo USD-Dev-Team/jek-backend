@@ -53,6 +53,47 @@ export class StatisticsService {
       }),
     ]);
 
+    // 5. Top 5 hodimlar (User complete qilganlari bo'yicha)
+    const topEmployeesGrouped = await this.prisma.requests.groupBy({
+      by: ['assigned_jek_id'],
+      where: {
+        ...baseWhere,
+        status: 'COMPLETED',
+        assigned_jek_id: { not: null },
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _count: {
+          id: 'desc',
+        },
+      },
+      take: 5,
+    });
+
+    const adminIds = topEmployeesGrouped
+      .map((item) => item.assigned_jek_id)
+      .filter((id): id is string => !!id);
+
+    const admins = await this.prisma.admins.findMany({
+      where: { id: { in: adminIds } },
+      select: { id: true, first_name: true, last_name: true },
+    });
+
+    const adminMap = new Map(admins.map((a) => [a.id, a]));
+
+    const topEmployees = topEmployeesGrouped.map((item) => {
+      const admin = item.assigned_jek_id
+        ? adminMap.get(item.assigned_jek_id)
+        : null;
+      return {
+        id: item.assigned_jek_id,
+        name: admin ? `${admin.first_name} ${admin.last_name}` : "Noma'lum",
+        completedCount: item._count.id,
+      };
+    });
+
     return {
       // Статуслар рўйхати (Фронтенд учун хом ҳолатда)
       // Масалан: [{ status: 'PENDING', _count: { id: 10 } }, ...]
@@ -63,6 +104,7 @@ export class StatisticsService {
         received: todayReceived,
         finished: todayFinished,
       },
+      topEmployees,
       // Умумий сонини ҳам қўшиб юборамиз
       totalRequests: statusCounts.reduce(
         (acc, curr) => acc + curr._count.id,
