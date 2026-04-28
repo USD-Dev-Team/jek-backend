@@ -76,7 +76,11 @@ export class CreateRequestDto {
 }
 
 export class UniversalFilterDto {
-  @IsNotEmpty({ message: 'Ariza biriktirilgan hodim ID si' })
+  @ApiPropertyOptional({
+    description: 'Ariza biriktirilgan hodim ID si',
+    example: 'UUID',
+  })
+  @IsOptional()
   @IsString()
   assigned_jek_id?: string;
 
