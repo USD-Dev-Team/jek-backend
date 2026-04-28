@@ -121,6 +121,8 @@ model RequestStatusLog {
   changed_by_role String      @db.VarChar(50)
   changed_by_id   String      @db.VarChar(50)
   note            String?     @db.Text
+  photo_urls      String[]    @default([])
+  
   createdAt       DateTime    @default(now())
 
   @@map("request_status_logs")

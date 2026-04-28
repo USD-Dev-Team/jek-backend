@@ -408,12 +408,20 @@ export class RequestsService {
       },
     });
 
-    if (photo_urls && photo_urls.length > 0) {
-      // КУТИБ ТУРИНГ: Расмларни алоҳида альбом қилиб юборамиз
-      // Бизга тўлиқ дискдаги йўл керак, шунинг учун photo_urls-ни ўзини юборамиз
-      await this.botService.sendAlbum(request.user.telegram_id, photo_urls);
-    }
-    // 3. БОТ ОРҚАЛИ ЮБОРИШ (ЭНГ МУҲИМ ЖОЙИ)
+    // 3. Log saqlash
+    await this.prisma.requestStatusLog.create({
+      data: {
+        request_id: requestId,
+        old_status: request.status,
+        new_status: 'JEK_COMPLETED',
+        changed_by_role: 'JEK',
+        changed_by_id: jekId,
+        note: note,
+        photo_urls: photo_urls || [],
+      },
+    });
+
+    // 4. БОТ ОРҚАЛИ ЮБОРИШ (ЭНГ МУҲИМ ЖОЙИ)
     if (request.user?.telegram_id) {
       // А) Аввал тугмали хабарни юборамиз
       const buttons = Markup.inlineKeyboard([
@@ -431,13 +439,17 @@ export class RequestsService {
         ],
       ]);
 
+      if (photo_urls && photo_urls.length > 0) {
+        await this.botService.sendAlbum(request.user.telegram_id, photo_urls);
+      }
+      
       await this.botService.sendNotificationWithButtons(
         request.user.telegram_id,
         `✅ <b>Murojaat yakunlandi!</b>\n\n#${request.request_number}-sonli arizangiz bajarildi.\n📝 <b>Izoh:</b> ${note}`,
         buttons,
       );
 
-      // Б) Расмларни юбориш (URL эмас, локал йўл орқали)
+      // Б) Расмlarni юбориш (Локал йўл орқали)
     }
 
     return { success: true, data: updatedRequest };
@@ -549,11 +561,13 @@ export class RequestsService {
         },
         // Statuslar tarixini shu yerda olib kelamiz
         requestStatusLogs: {
-          where: { note: { not: null } },
           select: {
             changed_by_role: true,
             note: true,
+            photo_urls: true,
             createdAt: true,
+            old_status: true,
+            new_status: true,
           },
           orderBy: { createdAt: 'desc' },
         },
@@ -571,12 +585,13 @@ export class RequestsService {
         if (!acc[role]) {
           acc[role] = [];
         }
-        if (log.note) {
-          acc[role].push({
-            note: log.note,
-            createdAt: log.createdAt,
-          });
-        }
+        acc[role].push({
+          note: log.note,
+          photo_urls: log.photo_urls,
+          createdAt: log.createdAt,
+          old_status: log.old_status,
+          new_status: log.new_status,
+        });
         return acc;
       },
       {} as Record<string, any[]>,
