@@ -76,6 +76,10 @@ export class CreateRequestDto {
 }
 
 export class UniversalFilterDto {
+  @IsNotEmpty({ message: 'Ariza biriktirilgan hodim ID si' })
+  @IsString()
+  assigned_jek_id: string;
+
   @ApiPropertyOptional({
     description: 'Qidiruv boshlanish sanasi (ISO 8601 formatida)',
     example: '2026-04-10',
@@ -117,7 +121,7 @@ export class UniversalFilterDto {
       'JEK_COMPLETED',
       'JEK_REJECTED',
       'COMPLETED',
-      'REJECTED'
+      'REJECTED',
     ],
   })
   @IsOptional()
