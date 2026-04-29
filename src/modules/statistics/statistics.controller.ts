@@ -5,6 +5,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { GeneralStatisticsDto } from './dto/statistics.dto';
 import { TokenGuard } from 'src/common/guards/token.guard';
@@ -22,11 +23,29 @@ export class StatisticsController {
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.JEK, jekRoles.INSPECTION, jekRoles.GOVERNMENT)
   @ApiOperation({
-    summary: 'Dashboard uchun barcha statistik ma’lumotlarni olish',
+    summary: "Dashboard uchun barcha statistik ma'lumotlarni olish",
   })
   @ApiResponse({ status: 200, description: 'Muvaffaqiyatli qaytarildi' })
   async getGeneralStats(@Query() query: GeneralStatisticsDto) {
     // query ichidan year, district, adminId, neighborhood keladi
     return this.statisticsService.getDashboardData(query);
+  }
+
+  @Get('district-statistics')
+  @UseGuards(TokenGuard, RoleGuard)
+  @Roles(jekRoles.JEK, jekRoles.INSPECTION, jekRoles.GOVERNMENT)
+  @ApiOperation({
+    summary:
+      "Berilgan yil bo'yicha har bir tumandagi arizalar soni status bo'yicha",
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    type: Number,
+    description: 'Yil (default: joriy yil)',
+  })
+  @ApiResponse({ status: 200, description: 'Muvaffaqiyatli qaytarildi' })
+  async getDistrictStatistics(@Query('year') year?: number) {
+    return this.statisticsService.getDistrictStatisticsByStatus(year);
   }
 }

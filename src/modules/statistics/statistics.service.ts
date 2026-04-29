@@ -113,6 +113,62 @@ export class StatisticsService {
     };
   }
 
+  async getDistrictStatisticsByStatus(year?: number) {
+    const targetYear = year ?? new Date().getFullYear();
+
+    // 1. Yil boshidan oxirigicha bo'lgan vaqt oralig'ini belgilash
+    const startDate = new Date(`${targetYear}-01-01`);
+    const endDate = new Date(`${targetYear}-12-31T23:59:59.999Z`);
+
+    // 2. Barcha arizalarni olish (filter bilan)
+    const requests = await this.prisma.requests.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        address: {
+          select: {
+            district: true,
+          },
+        },
+      },
+    });
+
+    // 3. Ma'lumotlarni guruhlash
+    const districts = new Map<string, any>();
+
+    requests.forEach((request) => {
+      const district = request.address.district;
+      const status = request.status;
+
+      if (!districts.has(district)) {
+        districts.set(district, {
+          district,
+          PENDING: 0,
+          IN_PROGRESS: 0,
+          COMPLETED: 0,
+          JEK_COMPLETED: 0,
+          REJECTED: 0,
+          JEK_REJECTED: 0,
+          total: 0,
+        });
+      }
+
+      const districtData = districts.get(district);
+      if (districtData && status in districtData) {
+        districtData[status] += 1;
+        districtData.total += 1;
+      }
+    });
+
+    return Array.from(districts.values()).sort((a, b) =>
+      a.district.localeCompare(b.district),
+    );
+  }
+
   private async getMonthlyDynamics(year: number, baseWhere: any) {
     const adminId = baseWhere.assigned_jek_id;
 
@@ -145,3 +201,4 @@ export class StatisticsService {
     return chartData;
   }
 }
+ 
