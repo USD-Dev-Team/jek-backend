@@ -101,6 +101,7 @@ export class AuthService {
         role: true,
         id: true,
         phoneNumber: true,
+        isActive: true,
         addresses: {
           select: {
             address: { select: { district: true, neighborhood: true } },
@@ -153,6 +154,7 @@ export class AuthService {
       first_name: existJek.first_name,
       last_name: existJek.last_name,
       addresses: existJek.addresses,
+      isActive: existJek.isActive,
       refreshToken,
       accessToken,
     };

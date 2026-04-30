@@ -53,6 +53,47 @@ export class StatisticsService {
       }),
     ]);
 
+    // 5. Top 5 hodimlar (User complete qilganlari bo'yicha)
+    const topEmployeesGrouped = await this.prisma.requests.groupBy({
+      by: ['assigned_jek_id'],
+      where: {
+        ...baseWhere,
+        status: 'COMPLETED',
+        assigned_jek_id: { not: null },
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _count: {
+          id: 'desc',
+        },
+      },
+      take: 5,
+    });
+
+    const adminIds = topEmployeesGrouped
+      .map((item) => item.assigned_jek_id)
+      .filter((id): id is string => !!id);
+
+    const admins = await this.prisma.admins.findMany({
+      where: { id: { in: adminIds } },
+      select: { id: true, first_name: true, last_name: true },
+    });
+
+    const adminMap = new Map(admins.map((a) => [a.id, a]));
+
+    const topEmployees = topEmployeesGrouped.map((item) => {
+      const admin = item.assigned_jek_id
+        ? adminMap.get(item.assigned_jek_id)
+        : null;
+      return {
+        id: item.assigned_jek_id,
+        name: admin ? `${admin.first_name} ${admin.last_name}` : "Noma'lum",
+        completedCount: item._count.id,
+      };
+    });
+
     return {
       // Статуслар рўйхати (Фронтенд учун хом ҳолатда)
       // Масалан: [{ status: 'PENDING', _count: { id: 10 } }, ...]
@@ -63,12 +104,69 @@ export class StatisticsService {
         received: todayReceived,
         finished: todayFinished,
       },
+      topEmployees,
       // Умумий сонини ҳам қўшиб юборамиз
       totalRequests: statusCounts.reduce(
         (acc, curr) => acc + curr._count.id,
         0,
       ),
     };
+  }
+
+  async getDistrictStatisticsByStatus(year?: number) {
+    const targetYear = year ?? new Date().getFullYear();
+
+    // 1. Yil boshidan oxirigicha bo'lgan vaqt oralig'ini belgilash
+    const startDate = new Date(`${targetYear}-01-01`);
+    const endDate = new Date(`${targetYear}-12-31T23:59:59.999Z`);
+
+    // 2. Barcha arizalarni olish (filter bilan)
+    const requests = await this.prisma.requests.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        address: {
+          select: {
+            district: true,
+          },
+        },
+      },
+    });
+
+    // 3. Ma'lumotlarni guruhlash
+    const districts = new Map<string, any>();
+
+    requests.forEach((request) => {
+      const district = request.address.district;
+      const status = request.status;
+
+      if (!districts.has(district)) {
+        districts.set(district, {
+          district,
+          PENDING: 0,
+          IN_PROGRESS: 0,
+          COMPLETED: 0,
+          JEK_COMPLETED: 0,
+          REJECTED: 0,
+          JEK_REJECTED: 0,
+          total: 0,
+        });
+      }
+
+      const districtData = districts.get(district);
+      if (districtData && status in districtData) {
+        districtData[status] += 1;
+        districtData.total += 1;
+      }
+    });
+
+    return Array.from(districts.values()).sort((a, b) =>
+      a.district.localeCompare(b.district),
+    );
   }
 
   private async getMonthlyDynamics(year: number, baseWhere: any) {
@@ -103,3 +201,4 @@ export class StatisticsService {
     return chartData;
   }
 }
+ 
