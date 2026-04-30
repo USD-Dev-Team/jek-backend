@@ -78,7 +78,21 @@ export class StatisticsService {
 
     const admins = await this.prisma.admins.findMany({
       where: { id: { in: adminIds } },
-      select: { id: true, first_name: true, last_name: true },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        addresses: {
+          include: {
+            address: {
+              select: {
+                district: true,
+                neighborhood: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const adminMap = new Map(admins.map((a) => [a.id, a]));
@@ -87,10 +101,20 @@ export class StatisticsService {
       const admin = item.assigned_jek_id
         ? adminMap.get(item.assigned_jek_id)
         : null;
+
+      // Adminning barcha hududlarini olish
+      const districts =
+        admin?.addresses.map((a) => a.address.district).filter(Boolean) ?? [];
+      const neighborhoods =
+        admin?.addresses.map((a) => a.address.neighborhood).filter(Boolean) ??
+        [];
+
       return {
         id: item.assigned_jek_id,
         name: admin ? `${admin.first_name} ${admin.last_name}` : "Noma'lum",
         completedCount: item._count.id,
+        districts: districts.length > 0 ? districts : ["Noma'lum"],
+        neighborhoods: neighborhoods.length > 0 ? neighborhoods : ["Noma'lum"],
       };
     });
 
@@ -171,26 +195,52 @@ export class StatisticsService {
 
   private async getMonthlyDynamics(year: number, baseWhere: any) {
     const adminId = baseWhere.assigned_jek_id;
+    const addressFilter = baseWhere.address;
 
-    // 1. Динамик филтр ясаб оламиз
-    // Агар adminId бўлса, UUID типида солиштирамиз, бўлмаса бўш жой қолдирамиз
+    // 1. Admin filtri
     const adminFilter = adminId
       ? Prisma.sql`AND "assigned_jek_id" = ${adminId}`
       : Prisma.empty;
 
-    // 2. Сўровни юборамиз
+    // 2. Address filtri (district va neighborhood)
+    let addressCondition = Prisma.empty;
+    if (addressFilter) {
+      if (addressFilter.district && addressFilter.neighborhood) {
+        addressCondition = Prisma.sql`AND EXISTS (
+          SELECT 1 FROM "addresses" a 
+          WHERE a.id = "requests".address_id 
+          AND a.district ILIKE ${`%${addressFilter.district}%`}
+          AND a.neighborhood ILIKE ${`%${addressFilter.neighborhood}%`}
+        )`;
+      } else if (addressFilter.district) {
+        addressCondition = Prisma.sql`AND EXISTS (
+          SELECT 1 FROM "addresses" a 
+          WHERE a.id = "requests".address_id 
+          AND a.district ILIKE ${`%${addressFilter.district}%`}
+        )`;
+      } else if (addressFilter.neighborhood) {
+        addressCondition = Prisma.sql`AND EXISTS (
+          SELECT 1 FROM "addresses" a 
+          WHERE a.id = "requests".address_id 
+          AND a.neighborhood ILIKE ${`%${addressFilter.neighborhood}%`}
+        )`;
+      }
+    }
+
+    // 3. Сўровни юборамиз
     const monthlyData = await this.prisma.$queryRaw`
     SELECT 
       EXTRACT(MONTH FROM "createdAt") as month,
       COUNT(id) as count
     FROM "requests"
     WHERE EXTRACT(YEAR FROM "createdAt") = ${year}
-    ${adminFilter}  
+    ${adminFilter}
+    ${addressCondition}
     GROUP BY month
     ORDER BY month ASC
   `;
 
-    // 3. Маълумотни форматлаш
+    // 4. Маълумотни форматлаш
     const chartData = new Array(12).fill(0);
     (monthlyData as any[]).forEach((d) => {
       // PostgreSQL баъзан ойни 1.0 (float) қайтариши мумкин, шунинг учун parseInt
@@ -201,4 +251,3 @@ export class StatisticsService {
     return chartData;
   }
 }
- 
