@@ -123,6 +123,10 @@ export class AuthService {
       throw new BadRequestException('Phone number or password error');
     }
 
+    if (existJek.isActive === false) {
+      throw new BadRequestException('User is not active');
+    }
+    
     const jti = crypto.randomUUID();
     const payload = {
       id: existJek.id,
@@ -176,6 +180,10 @@ export class AuthService {
         throw new BadRequestException('Ruxsat etilmadi / Access Denied');
       }
 
+      if (admin.isActive === false) {
+        throw new BadRequestException('User is not active');
+      }
+
       // 3. Token mosligini (hash orqali) tekshirish
       const refreshTokenMatches = await bcrypt.compare(
         refreshToken,
@@ -217,6 +225,7 @@ export class AuthService {
         refreshToken: newRefreshToken,
         userId: admin.id,
         role: admin.role,
+        isActive: admin.isActive,
       };
     } catch (e) {
       console.log(e);
