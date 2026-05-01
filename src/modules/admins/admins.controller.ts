@@ -7,8 +7,6 @@ import {
   Req,
   ParseUUIDPipe,
   UseGuards,
-  Post,
-  Delete,
   InternalServerErrorException,
   HttpException,
   Query,

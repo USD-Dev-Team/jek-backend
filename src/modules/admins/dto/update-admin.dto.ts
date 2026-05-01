@@ -54,15 +54,10 @@ export class updateStatusDto {
 }
 
 export class UniversalStaffSearch {
-  @ApiPropertyOptional({ description: 'Ismi', example: 'Ali' })
+  @ApiPropertyOptional({ description: 'Ismi, familyasi yoki telefon raqami', example: 'Ali' })
   @IsOptional()
   @IsString()
-  first_name?: string;
-
-  @ApiPropertyOptional({ description: 'Familyasi', example: 'Valiyev' })
-  @IsOptional()
-  @IsString()
-  last_name?: string;
+  search?: string;
 
   @ApiPropertyOptional({
     description: 'Tuman nomi',
@@ -79,14 +74,6 @@ export class UniversalStaffSearch {
   @IsOptional()
   @IsString()
   neighborhood?: string;
-
-  @ApiPropertyOptional({
-    description: 'Telefon raqami',
-    example: '+998901234567',
-  })
-  @IsOptional()
-  @IsString()
-  phoneNumber?: string;
 
   @ApiPropertyOptional({
     description: 'Hodim roli',

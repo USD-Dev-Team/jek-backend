@@ -207,48 +207,26 @@ export class AdminsService {
   }
 
   async universalStaffSearch(dto: UniversalStaffSearch) {
-    const {
-      first_name,
-      last_name,
-      district,
-      neighborhood,
-      phoneNumber,
-      isActive,
-      role,
-      page = 1, // DTO'ga qo'shgan paginatsiyamiz
-      limit = 10,
-    } = dto;
-
+    const {search, district, neighborhood, isActive, role, page = 1, limit = 10} = dto;
     const skip = (Number(page) - 1) * Number(limit);
     const where: any = {};
 
-    // 1. Ism va Familiya (String maydonlar)
-    if (first_name) {
-      where.first_name = { contains: first_name, mode: 'insensitive' };
-    }
-    if (last_name) {
-      where.last_name = { contains: last_name, mode: 'insensitive' };
+    if (search) {
+      where.OR = [
+        { first_name: { contains: search, mode: 'insensitive' } },
+        { last_name: { contains: search, mode: 'insensitive' } },
+        { phoneNumber: { contains: search.replace(/\D/g, '') } }
+      ];
     }
 
-    // 2. Role (Enum - MUHIM: contains ishlamaydi!)
     if (role) {
-      where.role = role; // Enum to'g'ridan-to'g'ri tenglik bilan tekshiriladi
+      where.role = role; 
     }
 
-    // 3. Telefon
-    if (phoneNumber) {
-      where.phoneNumber = {
-        contains: phoneNumber.replace(/\D/g, ''),
-      };
-    }
-
-    // 4. isActive (Boolean)
-    // DTO'da Transform ishlatganimiz uchun bu yerda to'g'ridan-to'g'ri boolean keladi
     if (isActive !== undefined) {
       where.isActive = isActive;
     }
 
-    // 5. Hududiy qidiruv
     if (district || neighborhood) {
       where.addresses = {
         some: {
@@ -264,7 +242,6 @@ export class AdminsService {
       };
     }
 
-    // 6. Bazadan qidirish (Paginatsiya bilan)
     const [staff, total] = await Promise.all([
       this.prisma.admins.findMany({
         where,

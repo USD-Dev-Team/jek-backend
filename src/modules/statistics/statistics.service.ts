@@ -19,14 +19,25 @@ export class StatisticsService {
     };
 
     if (district || neighborhood) {
-      baseWhere.address = {
-        ...(district && {
+      if (district && neighborhood) {
+        // Ikkala maydon ham kelsa - OR logikasi
+        baseWhere.address = {
+          OR: [
+            { district: { contains: district, mode: 'insensitive' } },
+            { neighborhood: { contains: neighborhood, mode: 'insensitive' } },
+          ],
+        };  
+      } else if (district) {
+        // Faqat district kelsa
+        baseWhere.address = {
           district: { contains: district, mode: 'insensitive' },
-        }),
-        ...(neighborhood && {
+        };
+      } else if (neighborhood) {
+        // Faqat neighborhood kelsa
+        baseWhere.address = {
           neighborhood: { contains: neighborhood, mode: 'insensitive' },
-        }),
-      };
+        };
+      }
     }
     if (adminId) baseWhere.assigned_jek_id = adminId;
 
@@ -202,27 +213,34 @@ export class StatisticsService {
       ? Prisma.sql`AND "assigned_jek_id" = ${adminId}`
       : Prisma.empty;
 
-    // 2. Address filtri (district va neighborhood)
+    // 2. Address filtri (district va neighborhood) - OR logikasi bilan
     let addressCondition = Prisma.empty;
     if (addressFilter) {
-      if (addressFilter.district && addressFilter.neighborhood) {
-        addressCondition = Prisma.sql`AND EXISTS (
-          SELECT 1 FROM "addresses" a 
-          WHERE a.id = "requests".address_id 
-          AND a.district ILIKE ${`%${addressFilter.district}%`}
-          AND a.neighborhood ILIKE ${`%${addressFilter.neighborhood}%`}
-        )`;
+      if (addressFilter.OR) {
+        // Ikkala maydon ham kelsa - OR logikasi
+        const districtValue = addressFilter.OR[0]?.district?.contains;
+        const neighborhoodValue = addressFilter.OR[1]?.neighborhood?.contains;
+
+        if (districtValue && neighborhoodValue) {
+          addressCondition = Prisma.sql`AND EXISTS (
+            SELECT 1 FROM "addresses" a 
+            WHERE a.id = "requests".address_id 
+            AND (a.district ILIKE ${`%${districtValue}%`} OR a.neighborhood ILIKE ${`%${neighborhoodValue}%`})
+          )`;
+        }
       } else if (addressFilter.district) {
+        // Faqat district kelsa
         addressCondition = Prisma.sql`AND EXISTS (
           SELECT 1 FROM "addresses" a 
           WHERE a.id = "requests".address_id 
-          AND a.district ILIKE ${`%${addressFilter.district}%`}
+          AND a.district ILIKE ${`%${addressFilter.district.contains}%`}
         )`;
       } else if (addressFilter.neighborhood) {
+        // Faqat neighborhood kelsa
         addressCondition = Prisma.sql`AND EXISTS (
           SELECT 1 FROM "addresses" a 
           WHERE a.id = "requests".address_id 
-          AND a.neighborhood ILIKE ${`%${addressFilter.neighborhood}%`}
+          AND a.neighborhood ILIKE ${`%${addressFilter.neighborhood.contains}%`}
         )`;
       }
     }
