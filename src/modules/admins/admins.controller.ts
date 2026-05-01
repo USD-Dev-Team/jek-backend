@@ -10,6 +10,7 @@ import {
   InternalServerErrorException,
   HttpException,
   Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import { AdminsService } from './admins.service';
 import {
@@ -69,7 +70,10 @@ export class AdminsController {
   @UseGuards(TokenGuard, RoleGuard)
   @Roles(jekRoles.INSPECTION, jekRoles.GOVERNMENT)
   @Get('filter-list')
-  async universalStaffSearch(@Query() filterDto: UniversalStaffSearch) {
+  async universalStaffSearch(
+    @Query(new ValidationPipe({ transform: true, whitelist: true }))
+    filterDto: UniversalStaffSearch,
+  ) {
     try {
       return await this.adminsService.universalStaffSearch(filterDto);
     } catch (error) {

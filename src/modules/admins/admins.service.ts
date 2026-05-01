@@ -207,20 +207,35 @@ export class AdminsService {
   }
 
   async universalStaffSearch(dto: UniversalStaffSearch) {
-    const {search, district, neighborhood, isActive, role, page = 1, limit = 10} = dto;
+    const {
+      search,
+      district,
+      neighborhood,
+      isActive,
+      role,
+      page = 1,
+      limit = 10,
+    } = dto;
     const skip = (Number(page) - 1) * Number(limit);
     const where: any = {};
 
-    if (search) {
-      where.OR = [
+    if (search && search.trim().length > 0) {
+      const phoneSearch = search.replace(/\D/g, '');
+      const orConditions: any[] = [
         { first_name: { contains: search, mode: 'insensitive' } },
         { last_name: { contains: search, mode: 'insensitive' } },
-        { phoneNumber: { contains: search.replace(/\D/g, '') } }
       ];
+
+      // Faqat raqam bo'lganda phoneNumber filter qo'shamiz
+      if (phoneSearch.length > 0) {
+        orConditions.push({ phoneNumber: { contains: phoneSearch } });
+      }
+
+      where.OR = orConditions;
     }
 
     if (role) {
-      where.role = role; 
+      where.role = role;
     }
 
     if (isActive !== undefined) {

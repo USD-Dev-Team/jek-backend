@@ -54,9 +54,13 @@ export class updateStatusDto {
 }
 
 export class UniversalStaffSearch {
-  @ApiPropertyOptional({ description: 'Ismi, familyasi yoki telefon raqami', example: 'Ali' })
+  @ApiPropertyOptional({
+    description: 'Ismi, familyasi yoki telefon raqami',
+    example: 'Ali',
+  })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value?.trim())
   search?: string;
 
   @ApiPropertyOptional({
@@ -86,8 +90,9 @@ export class UniversalStaffSearch {
 
   @ApiPropertyOptional({ description: 'Xodim faolligi', example: true })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true) // Query'dan kelganda stringni boolean qiladi
-  @IsBoolean()
+  @Transform(({ value }) =>
+    value === undefined ? undefined : value === 'true' || value === true,
+  ) 
   isActive?: boolean;
 
   // PAGINATSIYA UCHUN QO'SHILDI
